@@ -15,13 +15,22 @@ use ratatui::{
 /// that state into widgets.
 pub fn render(f: &mut Frame, app: &AppState) {
     // 1. Create Layout
-    let chunks = Layout::default()
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),      // Top: Header
+            Constraint::Min(0),         // Middle: Body
+            Constraint::Length(1),      // Bottom: Footer
+        ])
+        .split(f.size());
+
+    let body_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(30), // Left: Mesh List
             Constraint::Percentage(70), // Right: Events + Log Focus
         ])
-        .split(f.size());
+        .split(main_chunks[1]);
 
     let right_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -29,16 +38,47 @@ pub fn render(f: &mut Frame, app: &AppState) {
             Constraint::Percentage(60), // Top-Right: Event Stream
             Constraint::Percentage(40), // Bottom-Right: Log Focus
         ])
-        .split(chunks[1]);
+        .split(body_chunks[1]);
 
-    // 2. Render Left Panel: Mesh List
-    render_mesh_list(f, app, chunks[0]);
-
-    // 3. Render Top-Right Panel: Event Stream
+    // 2. Render Components
+    render_header(f, app, main_chunks[0]);
+    render_mesh_list(f, app, body_chunks[0]);
     render_event_stream(f, app, right_chunks[0]);
-
-    // 4. Render Bottom-Right Panel: Log Focus
     render_log_focus(f, app, right_chunks[1]);
+    render_footer(f, main_chunks[2]);
+}
+
+fn render_header(f: &mut Frame, app: &AppState, area: Rect) {
+    let mesh_count = app.agents.len();
+    let event_total = app.total_events_received;
+
+    let content = Line::from(vec![
+        Span::styled(" VIEW ", Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::raw(" │ "),
+        Span::styled(format!("Mesh: {} agents", mesh_count), Style::default().fg(Color::Cyan)),
+        Span::raw(" │ "),
+        Span::styled(format!("Total Events: {}", event_total), Style::default().fg(Color::Green)),
+        Span::raw(" │ "),
+        Span::styled("MODE: Simulated", Style::default().fg(Color::Yellow)),
+    ]);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray));
+    
+    let p = Paragraph::new(content)
+        .block(block)
+        .alignment(ratatui::layout::Alignment::Center);
+    
+    f.render_widget(p, area);
+}
+
+fn render_footer(f: &mut Frame, area: Rect) {
+    let help_text = " [↑/↓] Select Agent │ [q] Quit │ [c] Ctrl+C Exit ";
+    let p = Paragraph::new(help_text)
+        .style(Style::default().fg(Color::DarkGray))
+        .alignment(ratatui::layout::Alignment::Right);
+    f.render_widget(p, area);
 }
 
 fn render_mesh_list(f: &mut Frame, app: &AppState, area: Rect) {

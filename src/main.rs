@@ -84,6 +84,10 @@ async fn main() -> Result<()> {
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => state.should_quit = true,
                     (KeyCode::Down, _) => state.select_next(),
                     (KeyCode::Up, _) => state.select_previous(),
+                    (KeyCode::PageDown, _) => state.select_next_page(),
+                    (KeyCode::PageUp, _) => state.select_previous_page(),
+                    (KeyCode::Home, _) => state.select_first(),
+                    (KeyCode::End, _) => state.select_last(),
                     _ => {}
                 }
             }

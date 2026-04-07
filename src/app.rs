@@ -43,6 +43,7 @@ pub struct AppState {
     pub events: VecDeque<Event>,
     pub selected_agent_idx: usize,
     pub should_quit: bool,
+    pub total_events_received: u64,
 }
 
 impl AppState {
@@ -52,10 +53,12 @@ impl AppState {
             events: VecDeque::with_capacity(EVENT_LIMIT),
             selected_agent_idx: 0,
             should_quit: false,
+            total_events_received: 0,
         }
     }
 
     pub fn add_event(&mut self, event: Event) {
+        self.total_events_received += 1;
         if self.events.len() >= EVENT_LIMIT {
             self.events.pop_back();
         }
@@ -83,6 +86,28 @@ impl AppState {
             self.selected_agent_idx = self.agents.len() - 1;
         } else {
             self.selected_agent_idx -= 1;
+        }
+    }
+
+    pub fn select_first(&mut self) {
+        self.selected_agent_idx = 0;
+    }
+
+    pub fn select_last(&mut self) {
+        if !self.agents.is_empty() {
+            self.selected_agent_idx = self.agents.len() - 1;
+        }
+    }
+
+    pub fn select_next_page(&mut self) {
+        if !self.agents.is_empty() {
+            self.selected_agent_idx = (self.selected_agent_idx + 5).min(self.agents.len() - 1);
+        }
+    }
+
+    pub fn select_previous_page(&mut self) {
+        if !self.agents.is_empty() {
+            self.selected_agent_idx = self.selected_agent_idx.saturating_sub(5);
         }
     }
 
