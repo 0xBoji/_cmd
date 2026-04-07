@@ -76,7 +76,7 @@ fn render_header(f: &mut Frame, app: &AppState, area: Rect) {
         Span::raw(" │ "),
         Span::styled(format!("Total Events: {}", event_total), Style::default().fg(Color::Green)),
         Span::raw(" │ "),
-        Span::styled("MODE: Simulated", Style::default().fg(Color::Yellow)),
+        Span::styled("MODE: Real-time (CAMP)", Style::default().fg(Color::Yellow)),
     ]);
 
     let block = Block::default()
@@ -102,16 +102,19 @@ fn render_activity_sparkline(f: &mut Frame, app: &AppState, area: Rect) {
     let selected_id = app.get_selected_agent_id();
     let data = if let Some(id) = selected_id {
         if let Some(agent) = app.agents.get(&id) {
-            agent.activity.as_slices().0.to_vec()
+            let (s1, s2) = agent.activity.as_slices();
+            let mut combined = s1.to_vec();
+            combined.extend_from_slice(s2);
+            combined
         } else {
-            vec![0; 20]
+            vec![0; 50]
         }
     } else {
-        vec![0; 20]
+        vec![0; 50]
     };
 
     let sparkline = Sparkline::default()
-        .block(Block::default().title(" [ Activity Frequency ] ").borders(Borders::ALL))
+        .block(Block::default().title(" [ Activity Frequency (50s) ] ").borders(Borders::ALL))
         .data(&data)
         .style(Style::default().fg(Color::Yellow));
 
@@ -121,27 +124,45 @@ fn render_activity_sparkline(f: &mut Frame, app: &AppState, area: Rect) {
 fn render_metrics_summary(f: &mut Frame, app: &AppState, area: Rect) {
     let selected_id = app.get_selected_agent_id();
     
-    let content = if let Some(id) = selected_id {
+    let (content, style) = if let Some(id) = selected_id {
         if let Some(agent) = app.agents.get(&id) {
-            format!(
-                "Agent ID:       {}\nRole:           {}\nStatus:         {}\nBranch:         {}\nTokens:         {}\nGit Locked:     {}\nLast Seen:      {}",
+            let status_style = if agent.status == "Offline" {
+                Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let text = format!(
+                "ID:             {}\n\
+                 Instance:       {}\n\
+                 Role:           {}\n\
+                 Project:        {}\n\
+                 Branch:         {}\n\
+                 Status:         {}\n\
+                 Tokens:         {}\n\
+                 Capabilities:   {}\n\
+                 Last Seen:      {}",
                 agent.id,
+                agent.instance_name,
                 agent.role,
-                agent.status.as_str(),
+                agent.project,
                 agent.branch,
+                agent.status,
                 agent.tokens,
-                agent.git_locked,
+                agent.capabilities.join(", "),
                 agent.last_seen.format("%Y-%m-%d %H:%M:%S")
-            )
+            );
+            (text, status_style)
         } else {
-            "Agent not found.".to_string()
+            ("Agent not found.".to_string(), Style::default())
         }
     } else {
-        "No agent selected. Use j/k to navigate.".to_string()
+        ("No agent selected. Use j/k to navigate.".to_string(), Style::default())
     };
 
     let p = Paragraph::new(content)
         .block(Block::default().title(" [ Agent Metrics ] ").borders(Borders::ALL))
+        .style(style)
         .wrap(Wrap { trim: true });
 
     f.render_widget(p, area);
@@ -153,21 +174,24 @@ fn render_mesh_list(f: &mut Frame, app: &AppState, area: Rect) {
         .values()
         .enumerate()
         .map(|(i, agent)| {
-            let style = if i == app.selected_agent_idx {
+            let base_style = if i == app.selected_agent_idx {
                 Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            } else if agent.status == "Offline" {
+                Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)
             } else {
                 Style::default().fg(Color::White)
             };
 
             let status_color = match agent.status.as_str() {
-                "Idle" => Color::Green,
-                "Busy" => Color::Red,
-                _ => Color::Gray,
+                "Idle" | "idle" => Color::Green,
+                "Busy" | "busy" => Color::Red,
+                "Offline" => Color::DarkGray,
+                _ => Color::Cyan,
             };
 
             let content = Line::from(vec![
-                Span::styled(format!("{:<15}", agent.id), style),
-                Span::styled(format!("{}", agent.status.as_str()), Style::default().fg(status_color)),
+                Span::styled(format!("{:<15}", agent.id), base_style),
+                Span::styled(format!("{}", agent.status), Style::default().fg(status_color)),
             ]);
 
             ListItem::new(content)

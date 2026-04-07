@@ -4,33 +4,23 @@ use serde::{Deserialize, Serialize};
 /// Maximum number of events to retain in the buffer.
 const EVENT_LIMIT: usize = 100;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AgentStatus {
-    Idle,
-    Busy,
-    Offline,
-}
 
-impl AgentStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Idle => "Idle",
-            Self::Busy => "Busy",
-            Self::Offline => "Offline",
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub id: String,
+    pub instance_name: String,
     pub role: String,
-    pub status: AgentStatus,
-    pub git_locked: bool,
+    pub project: String,
+    pub branch: String,
+    pub status: String,
+    pub capabilities: Vec<String>,
+    pub port: u16,
+    pub addresses: Vec<String>,
+    pub metadata: BTreeMap<String, String>,
     pub last_seen: chrono::DateTime<chrono::Local>,
     pub tokens: u64,
-    pub branch: String,
-    pub activity: VecDeque<u64>, // Recent activity levels for Sparkline
+    pub activity: VecDeque<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +29,22 @@ pub struct Event {
     pub agent_id: String,
     pub kind: String,
     pub payload: String,
+}
+
+/// Matches CAMP's JSON EventRecord
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventRecord {
+    pub kind: String,
+    pub origin: String,
+    pub reason: Option<String>,
+    pub previous: Option<Agent>,
+    pub current: Option<Agent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotRecord {
+    pub kind: String,
+    pub agents: Vec<Agent>,
 }
 
 pub struct AppState {
@@ -76,19 +82,23 @@ impl AppState {
     pub fn update_agent(&mut self, mut agent: Agent) {
         if let Some(existing) = self.agents.get(&agent.id) {
             agent.activity = existing.activity.clone();
-            agent.tokens = existing.tokens.max(agent.tokens);
-        } else {
-            // Initialize empty activity buffer for new agent
-            agent.activity = VecDeque::from(vec![0; 20]);
+            // Preserve tokens if the incoming one is zero (e.g. from a partial event)
+            if agent.tokens == 0 {
+                agent.tokens = existing.tokens;
+            }
+        } else if agent.activity.is_empty() {
+            // Initialize empty activity buffer for new agent (50 points)
+            agent.activity = VecDeque::from(vec![0; 50]);
         }
+        agent.last_seen = chrono::Local::now();
         self.agents.insert(agent.id.clone(), agent);
     }
 
     /// Ticks the activity buffers, shifting them to the left.
-    /// Should be called on each render or on a fixed interval.
+    /// Should be called on a fixed interval (e.g. 1s).
     pub fn tick_activity(&mut self) {
         for agent in self.agents.values_mut() {
-            if agent.activity.len() >= 20 {
+            if agent.activity.len() >= 50 {
                 agent.activity.pop_front();
             }
             agent.activity.push_back(0);

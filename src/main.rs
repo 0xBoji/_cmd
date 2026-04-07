@@ -51,8 +51,12 @@ async fn main() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel::<Event>(32);
     let (agent_tx, mut agent_rx) = mpsc::channel::<Agent>(32);
 
-    // 3. Start Listener (Background Task)
-    let listener_handle = tokio::spawn(listener::start_simulated_listener(event_tx, agent_tx));
+    // 3. Start Real-time Mesh Listener (Background Task)
+    let listener_handle = tokio::spawn(async move {
+        if let Err(e) = listener::start_camp_listener(event_tx, agent_tx).await {
+            eprintln!("Listener error: {}", e);
+        }
+    });
 
     let mut guard = TerminalGuard::new()?;
     let mut frame_count: u64 = 0;
@@ -100,8 +104,8 @@ async fn main() -> Result<()> {
             if state.should_quit {
                 break;
             }
-            // Only shift the sparkline every 10 frames (~160ms) for better visibility
-            if frame_count % 10 == 0 {
+            // Every 60 frames (~1s), shift the sparkline for a 50s rolling window
+            if frame_count % 60 == 0 {
                 state.tick_activity();
             }
             guard.terminal.draw(|f| ui::render(f, &state))?;

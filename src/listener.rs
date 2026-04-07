@@ -1,68 +1,67 @@
+use tokio::process::Command;
+use tokio::io::{BufReader, AsyncBufReadExt};
+use std::process::Stdio;
 use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
-use rand::RngExt;
-use chrono::Local;
+use crate::app::{Agent, Event, EventRecord, SnapshotRecord};
 
-use crate::app::{Agent, AgentStatus, Event};
+/// Connects to the real-time mesh via `camp watch --json`.
+pub async fn start_camp_listener(tx: mpsc::Sender<Event>, agent_tx: mpsc::Sender<Agent>) -> anyhow::Result<()> {
+    let mut child = Command::new("camp")
+        .arg("watch")
+        .arg("--json")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to start 'camp' process: {}. Is it in your PATH?", e))?;
 
-/// This simulates external agent events.
-/// 
-/// Later, this can be swapped with `camp watch --json` stdout piping.
-pub async fn start_simulated_listener(tx: mpsc::Sender<Event>, agent_tx: mpsc::Sender<Agent>) {
-    let agent_ids = vec!["agent-alpha", "agent-beta", "agent-gamma"];
-    let roles = vec!["coder", "reviewer", "planner"];
-    
-    // Initial agent registration
-    for (i, id) in agent_ids.iter().enumerate() {
-        let agent = Agent {
-            id: id.to_string(),
-            role: roles[i % roles.len()].to_string(),
-            status: AgentStatus::Idle,
-            git_locked: false,
-            last_seen: Local::now(),
-            tokens: 0,
-            branch: "main".to_string(),
-            activity: std::collections::VecDeque::new(),
-        };
-        let _ = agent_tx.send(agent).await;
+    let stdout = child.stdout.take().ok_or_else(|| anyhow::anyhow!("Failed to capture camp stdout"))?;
+    let mut reader = BufReader::new(stdout).lines();
+
+    while let Some(line) = reader.next_line().await? {
+        if line.is_empty() { continue; }
+
+        // Try parsing as a Snapshot first (initial state)
+        if let Ok(snapshot) = serde_json::from_str::<SnapshotRecord>(&line) {
+            for agent in snapshot.agents {
+                let _ = agent_tx.send(agent).await;
+            }
+            continue;
+        }
+
+        // Otherwise parse as an EventRecord
+        if let Ok(record) = serde_json::from_str::<EventRecord>(&line) {
+            match record.kind.as_str() {
+                "joined" | "updated" => {
+                    if let Some(agent) = record.current {
+                        let event = Event {
+                            timestamp: chrono::Local::now(),
+                            agent_id: agent.id.clone(),
+                            kind: record.kind.to_uppercase(),
+                            payload: format!("Agent {} via {}", record.kind, record.origin),
+                        };
+                        let _ = tx.send(event).await;
+                        let _ = agent_tx.send(agent).await;
+                    }
+                }
+                "left" => {
+                    if let Some(agent) = record.current {
+                        let mut offline_agent = agent.clone();
+                        offline_agent.status = "Offline".to_string();
+                        
+                        let event = Event {
+                            timestamp: chrono::Local::now(),
+                            agent_id: offline_agent.id.clone(),
+                            kind: "LEFT".to_string(),
+                            payload: format!("Agent left mesh (reason: {})", record.reason.unwrap_or_else(|| "unknown".into())),
+                        };
+                        let _ = tx.send(event).await;
+                        let _ = agent_tx.send(offline_agent).await;
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
-    loop {
-        let delay = rand::random_range(1..=4);
-        sleep(Duration::from_secs(delay)).await;
-
-        let agent_idx = rand::random_range(0..agent_ids.len());
-        let agent_id = agent_ids[agent_idx];
-        
-        let event_type = rand::random_range(0..3);
-        let branch_name = format!("feat/RAI-{}", rand::random_range(100..999));
-        let (kind, payload, new_status, new_git_lock): (String, String, AgentStatus, bool) = match event_type {
-            0 => ("Joined".into(), "Agent joined the mesh network.".into(), AgentStatus::Idle, false),
-            1 => ("Updated".into(), format!("Working on branch '{}'.", branch_name), AgentStatus::Busy, true),
-            2 => ("TaskExecuted".into(), "Ran unit tests in wasp sandbox.".into(), AgentStatus::Idle, false),
-            _ => unreachable!(),
-        };
-
-        let event = Event {
-            timestamp: Local::now(),
-            agent_id: agent_id.to_string(),
-            kind,
-            payload,
-        };
-
-        let _ = tx.send(event).await;
-
-        // Also update agent state periodically
-        let updated_agent = Agent {
-            id: agent_id.to_string(),
-            role: roles[agent_idx % roles.len()].to_string(),
-            status: new_status,
-            git_locked: new_git_lock,
-            last_seen: Local::now(),
-            tokens: rand::random_range(500..5000), // Simulate token usage
-            branch: branch_name,
-            activity: std::collections::VecDeque::new(),
-        };
-        let _ = agent_tx.send(updated_agent).await;
-    }
+    Ok(())
 }
