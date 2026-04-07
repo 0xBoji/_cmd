@@ -2,7 +2,7 @@ use crate::app::AppState;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph, Sparkline, Wrap},
     Frame,
 };
@@ -123,49 +123,74 @@ fn render_activity_sparkline(f: &mut Frame, app: &AppState, area: Rect) {
 
 fn render_metrics_summary(f: &mut Frame, app: &AppState, area: Rect) {
     let selected_id = app.get_selected_agent_id();
-    
-    let (content, style) = if let Some(id) = selected_id {
-        if let Some(agent) = app.agents.get(&id) {
-            let status_style = if agent.status == "Offline" {
-                Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)
-            } else {
-                Style::default().fg(Color::White)
-            };
+    let agent = selected_id.and_then(|id| app.agents.get(&id));
 
-            let text = format!(
-                "ID:             {}\n\
-                 Instance:       {}\n\
-                 Role:           {}\n\
-                 Project:        {}\n\
-                 Branch:         {}\n\
-                 Status:         {}\n\
-                 Tokens:         {}\n\
-                 Capabilities:   {}\n\
-                 Last Seen:      {}",
-                agent.id,
-                agent.instance_name,
-                agent.role,
-                agent.project,
-                agent.branch,
-                agent.status,
-                agent.tokens,
-                agent.capabilities.join(", "),
-                agent.last_seen.format("%Y-%m-%d %H:%M:%S")
-            );
-            (text, status_style)
-        } else {
-            ("Agent not found.".to_string(), Style::default())
+    let content = if let Some(agent) = agent {
+        let status_style = match agent.status.as_str() {
+            "Busy" | "busy" => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            "Offline" => Style::default().fg(Color::DarkGray),
+            _ => Style::default().fg(Color::Green),
+        };
+
+        let mut lines = vec![
+            Line::from(vec![
+                Span::styled(" [ Agent Details ] ", Style::default().add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::raw(" - ID:       "),
+                Span::styled(&agent.id, Style::default().fg(Color::Cyan)),
+            ]),
+            Line::from(vec![
+                Span::raw(" - Role:     "),
+                Span::raw(&agent.role),
+            ]),
+            Line::from(vec![
+                Span::raw(" - Status:   "),
+                Span::styled(&agent.status, status_style),
+            ]),
+            Line::from(vec![
+                Span::raw(" - Tokens:   "),
+                Span::styled(format_tokens(agent.tokens), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::raw(" - Branch:   "),
+                Span::styled(&agent.branch, Style::default().fg(Color::Magenta)),
+            ]),
+            Line::from(vec![
+                Span::raw(" - Proj:     "),
+                Span::raw(&agent.project),
+            ]),
+        ];
+
+        if agent.status == "busy" || agent.status == "Busy" {
+            lines.insert(1, Line::from(vec![
+                Span::styled(" ● EXECUTING ", Style::default().fg(Color::Red).add_modifier(Modifier::SLOW_BLINK)),
+            ]));
         }
+
+        Text::from(lines)
     } else {
-        ("No agent selected. Use j/k to navigate.".to_string(), Style::default())
+        Text::from("No agent selected to view metrics.")
     };
 
     let p = Paragraph::new(content)
-        .block(Block::default().title(" [ Agent Metrics ] ").borders(Borders::ALL))
-        .style(style)
+        .block(Block::default().title(" [ Metrics Summary ] ").borders(Borders::ALL))
         .wrap(Wrap { trim: true });
 
     f.render_widget(p, area);
+}
+
+fn format_tokens(tokens: u64) -> String {
+    let s = tokens.to_string();
+    let chars: Vec<char> = s.chars().rev().collect();
+    let mut result = Vec::new();
+    for (i, c) in chars.into_iter().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    result.into_iter().rev().collect()
 }
 
 fn render_mesh_list(f: &mut Frame, app: &AppState, area: Rect) {
@@ -212,20 +237,31 @@ fn render_log_focus(f: &mut Frame, app: &AppState, area: Rect) {
     let selected_id = app.get_selected_agent_id();
     
     let content = if let Some(ref id) = selected_id {
-        let focused_events: Vec<String> = app
-            .events
-            .iter()
-            .filter(|e| &e.agent_id == id)
-            .map(|e| format!("[{}] {}: {}", e.timestamp.format("%H:%M:%S"), e.kind, e.payload))
-            .collect();
+        let agent_events = app.get_events_for_agent(id);
 
-        if focused_events.is_empty() {
-            format!("No recent activity recorded for agent '{}'.", id)
+        if agent_events.is_empty() {
+            Text::from(format!("No recent activity recorded for agent '{}'.", id))
         } else {
-            focused_events.join("\n")
+            let mut lines = Vec::new();
+            for e in agent_events {
+                let level_color = match e.level.as_str() {
+                    "error" => Color::Red,
+                    "warn" => Color::Yellow,
+                    "success" => Color::Green,
+                    _ => Color::Cyan, // info or other
+                };
+
+                let component_tag = format!("[{:<6}] ", e.component.to_uppercase());
+                lines.push(Line::from(vec![
+                    Span::styled(format!("{} ", e.timestamp.format("%H:%M:%S")), Style::default().fg(Color::DarkGray)),
+                    Span::styled(component_tag, Style::default().fg(level_color).add_modifier(Modifier::BOLD)),
+                    Span::raw(&e.payload),
+                ]));
+            }
+            Text::from(lines)
         }
     } else {
-        "No agent selected.".to_string()
+        Text::from("No agent selected.")
     };
 
     let title = format!(" [ Log Focus: {} ] ", selected_id.unwrap_or_else(|| "N/A".to_string()));

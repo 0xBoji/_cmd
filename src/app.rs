@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 const EVENT_LIMIT: usize = 100;
 
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub id: String,
@@ -28,6 +27,8 @@ pub struct Event {
     pub timestamp: chrono::DateTime<chrono::Local>,
     pub agent_id: String,
     pub kind: String,
+    pub component: String,
+    pub level: String,
     pub payload: String,
 }
 
@@ -80,10 +81,17 @@ impl AppState {
     }
 
     pub fn update_agent(&mut self, mut agent: Agent) {
+        // Extract and parse tokens from metadata if present
+        if let Some(tokens_str) = agent.metadata.get("tokens") {
+            if let Ok(tokens) = tokens_str.replace(",", "").parse::<u64>() {
+                agent.tokens = tokens;
+            }
+        }
+
         if let Some(existing) = self.agents.get(&agent.id) {
             agent.activity = existing.activity.clone();
-            // Preserve tokens if the incoming one is zero (e.g. from a partial event)
-            if agent.tokens == 0 {
+            // Preserve tokens if the incoming one is zero but we had one before
+            if agent.tokens == 0 && existing.tokens > 0 {
                 agent.tokens = existing.tokens;
             }
         } else if agent.activity.is_empty() {
@@ -92,6 +100,13 @@ impl AppState {
         }
         agent.last_seen = chrono::Local::now();
         self.agents.insert(agent.id.clone(), agent);
+    }
+
+    pub fn get_events_for_agent(&self, agent_id: &str) -> Vec<&Event> {
+        self.events
+            .iter()
+            .filter(|e| e.agent_id == agent_id)
+            .collect()
     }
 
     /// Ticks the activity buffers, shifting them to the left.
