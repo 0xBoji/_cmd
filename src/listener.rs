@@ -36,18 +36,18 @@ pub async fn start_simulated_listener(tx: mpsc::Sender<Event>, agent_tx: mpsc::S
         
         let event_type = rand::random_range(0..3);
         let branch_name = format!("feat/RAI-{}", rand::random_range(100..999));
-        let (kind, payload, new_status, new_git_lock) = match event_type {
-            0 => ("Joined", "Agent joined the mesh network.", AgentStatus::Idle, false),
-            1 => ("Updated", format!("Working on branch '{}'.", branch_name), AgentStatus::Busy, true),
-            2 => ("TaskExecuted", "Ran unit tests in wasp sandbox.", AgentStatus::Idle, false),
+        let (kind, payload, new_status, new_git_lock): (String, String, AgentStatus, bool) = match event_type {
+            0 => ("Joined".into(), "Agent joined the mesh network.".into(), AgentStatus::Idle, false),
+            1 => ("Updated".into(), format!("Working on branch '{}'.", branch_name), AgentStatus::Busy, true),
+            2 => ("TaskExecuted".into(), "Ran unit tests in wasp sandbox.".into(), AgentStatus::Idle, false),
             _ => unreachable!(),
         };
 
         let event = Event {
             timestamp: Local::now(),
             agent_id: agent_id.to_string(),
-            kind: kind.to_string(),
-            payload: payload.to_string(),
+            kind,
+            payload,
         };
 
         let _ = tx.send(event).await;

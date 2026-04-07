@@ -54,16 +54,17 @@ async fn main() -> Result<()> {
     // 3. Start Listener (Background Task)
     let listener_handle = tokio::spawn(listener::start_simulated_listener(event_tx, agent_tx));
 
-    // 4. Initialize Terminal TUI
     let mut guard = TerminalGuard::new()?;
+    let mut frame_count: u64 = 0;
     
     // 5. Main Render/Event Loop
     let mut interval = tokio::time::interval(Duration::from_millis(16)); // Target ~60 FPS
     
     loop {
         interval.tick().await;
+        frame_count += 1;
 
-        // A. Handle incoming events
+        // A. Filter and handle incoming events
         while let Ok(event) = event_rx.try_recv() {
             let mut state = app_state.lock().await;
             state.add_event(event);
@@ -82,8 +83,8 @@ async fn main() -> Result<()> {
                 match (key.code, key.modifiers) {
                     (KeyCode::Char('q'), _) => state.should_quit = true,
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => state.should_quit = true,
-                    (KeyCode::Down, _) => state.select_next(),
-                    (KeyCode::Up, _) => state.select_previous(),
+                    (KeyCode::Down, _) | (KeyCode::Char('j'), _) => state.select_next(),
+                    (KeyCode::Up, _) | (KeyCode::Char('k'), _) => state.select_previous(),
                     (KeyCode::PageDown, _) => state.select_next_page(),
                     (KeyCode::PageUp, _) => state.select_previous_page(),
                     (KeyCode::Home, _) => state.select_first(),
@@ -93,11 +94,15 @@ async fn main() -> Result<()> {
             }
         }
 
-        // D. Render Frame
+        // D. Tick Activity and Render Frame
         {
-            let state = app_state.lock().await;
+            let mut state = app_state.lock().await;
             if state.should_quit {
                 break;
+            }
+            // Only shift the sparkline every 10 frames (~160ms) for better visibility
+            if frame_count % 10 == 0 {
+                state.tick_activity();
             }
             guard.terminal.draw(|f| ui::render(f, &state))?;
         }

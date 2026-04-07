@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Sparkline, Wrap},
     Frame,
 };
 
@@ -91,10 +91,59 @@ fn render_header(f: &mut Frame, app: &AppState, area: Rect) {
 }
 
 fn render_footer(f: &mut Frame, area: Rect) {
-    let help_text = " [↑/↓] Select Agent │ [q] Quit │ [c] Ctrl+C Exit ";
+    let help_text = " [j/k] Navigate │ [q] Quit │ [c] Ctrl+C Exit ";
     let p = Paragraph::new(help_text)
         .style(Style::default().fg(Color::DarkGray))
         .alignment(ratatui::layout::Alignment::Right);
+    f.render_widget(p, area);
+}
+
+fn render_activity_sparkline(f: &mut Frame, app: &AppState, area: Rect) {
+    let selected_id = app.get_selected_agent_id();
+    let data = if let Some(id) = selected_id {
+        if let Some(agent) = app.agents.get(&id) {
+            agent.activity.as_slices().0.to_vec()
+        } else {
+            vec![0; 20]
+        }
+    } else {
+        vec![0; 20]
+    };
+
+    let sparkline = Sparkline::default()
+        .block(Block::default().title(" [ Activity Frequency ] ").borders(Borders::ALL))
+        .data(&data)
+        .style(Style::default().fg(Color::Yellow));
+
+    f.render_widget(sparkline, area);
+}
+
+fn render_metrics_summary(f: &mut Frame, app: &AppState, area: Rect) {
+    let selected_id = app.get_selected_agent_id();
+    
+    let content = if let Some(id) = selected_id {
+        if let Some(agent) = app.agents.get(&id) {
+            format!(
+                "Agent ID:       {}\nRole:           {}\nStatus:         {}\nBranch:         {}\nTokens:         {}\nGit Locked:     {}\nLast Seen:      {}",
+                agent.id,
+                agent.role,
+                agent.status.as_str(),
+                agent.branch,
+                agent.tokens,
+                agent.git_locked,
+                agent.last_seen.format("%Y-%m-%d %H:%M:%S")
+            )
+        } else {
+            "Agent not found.".to_string()
+        }
+    } else {
+        "No agent selected. Use j/k to navigate.".to_string()
+    };
+
+    let p = Paragraph::new(content)
+        .block(Block::default().title(" [ Agent Metrics ] ").borders(Borders::ALL))
+        .wrap(Wrap { trim: true });
+
     f.render_widget(p, area);
 }
 
@@ -116,16 +165,10 @@ fn render_mesh_list(f: &mut Frame, app: &AppState, area: Rect) {
                 _ => Color::Gray,
             };
 
-            let content = vec![
-                Line::from(vec![
-                    Span::styled(format!("{:<15}", agent.id), style),
-                    Span::styled(format!("{:<10}", agent.role), Style::default().fg(Color::Cyan)),
-                    Span::styled(format!("{}", agent.status.as_str()), Style::default().fg(status_color)),
-                ]),
-                Line::from(vec![
-                    Span::styled(if agent.git_locked { " [GIT_LOCK]" } else { "" }, Style::default().fg(Color::Red)),
-                ]),
-            ];
+            let content = Line::from(vec![
+                Span::styled(format!("{:<15}", agent.id), style),
+                Span::styled(format!("{}", agent.status.as_str()), Style::default().fg(status_color)),
+            ]);
 
             ListItem::new(content)
         })
@@ -139,27 +182,7 @@ fn render_mesh_list(f: &mut Frame, app: &AppState, area: Rect) {
     f.render_widget(list, area);
 }
 
-fn render_event_stream(f: &mut Frame, app: &AppState, area: Rect) {
-    let items: Vec<ListItem> = app
-        .events
-        .iter()
-        .map(|event| {
-            let time = event.timestamp.format("%H:%M:%S").to_string();
-            let content = Line::from(vec![
-                Span::styled(format!("[{}] ", time), Style::default().fg(Color::Gray)),
-                Span::styled(format!("{}: ", event.agent_id), Style::default().fg(Color::Blue)),
-                Span::styled(format!("{}", event.kind), Style::default().fg(Color::Magenta)),
-                Span::styled(format!(" -> {}", event.payload), Style::default().fg(Color::White)),
-            ]);
-            ListItem::new(content)
-        })
-        .collect();
-
-    let list = List::new(items)
-        .block(Block::default().title(" [ Event Stream ] ").borders(Borders::ALL));
-
-    f.render_widget(list, area);
-}
+// render_event_stream is removed in Phase 3
 
 fn render_log_focus(f: &mut Frame, app: &AppState, area: Rect) {
     let selected_id = app.get_selected_agent_id();
