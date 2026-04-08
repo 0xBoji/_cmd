@@ -231,10 +231,10 @@ fn render_grid(ui: &mut egui::Ui, state: &mut AppState) {
     let page_size = columns * rows;
     let ids = state.visible_agents_page(page_size);
     let selected = state.get_selected_agent_id();
-    let spacing = 12.0;
+    let spacing = 10.0;
     let total_spacing = spacing * (columns.saturating_sub(1) as f32);
-    let tile_width = ((ui.available_width() - total_spacing).max(320.0)) / columns as f32;
-    let tile_size = Vec2::new(tile_width.max(320.0), 255.0);
+    let tile_width = ((ui.available_width() - total_spacing).max(240.0)) / columns as f32;
+    let tile_size = Vec2::new(tile_width.max(250.0), 222.0);
 
     ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -399,16 +399,20 @@ fn render_tile(
         .cloned()
         .unwrap_or_else(|| "idle".to_string());
 
+    let summary = agent
+        .metadata
+        .get("cwd")
+        .map_or_else(|| "-".to_string(), |cwd| truncate_path(cwd, 20));
     let response = Frame::new()
         .fill(fill)
         .stroke(Stroke::new(if selected { 2.0 } else { 1.0 }, border))
         .corner_radius(12.0)
-        .inner_margin(egui::Margin::same(12))
+        .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
             ui.set_min_size(tile_size);
             ui.horizontal(|ui| {
                 ui.label(RichText::new("●").color(status).size(16.0));
-                ui.label(RichText::new(&agent.id).strong().size(18.0));
+                ui.label(RichText::new(&agent.id).strong().size(17.0));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     chip(
                         ui,
@@ -444,20 +448,11 @@ fn render_tile(
                         .color(FG_MUTED),
                 );
                 ui.separator();
-                ui.label(
-                    RichText::new(
-                        agent
-                            .metadata
-                            .get("cwd")
-                            .map_or_else(|| "-".to_string(), |cwd| truncate_path(cwd, 24)),
-                    )
-                    .monospace()
-                    .color(FG_MUTED),
-                );
+                ui.label(RichText::new(summary.clone()).monospace().color(FG_MUTED));
             });
             ui.separator();
 
-            for event in events {
+            for event in &events {
                 ui.label(
                     RichText::new(format!(
                         "[{}] {}",
@@ -466,6 +461,14 @@ fn render_tile(
                     ))
                     .monospace()
                     .color(level_color(&event.level)),
+                );
+            }
+
+            if events.is_empty() {
+                ui.label(
+                    RichText::new("…waiting for recent transcript")
+                        .monospace()
+                        .color(FG_MUTED),
                 );
             }
 
@@ -590,9 +593,9 @@ fn trendline(agent: &Agent, width: usize) -> String {
 }
 
 fn grid_columns_for_width(width: f32) -> usize {
-    if width > 1600.0 {
+    if width > 1180.0 {
         3
-    } else if width > 980.0 {
+    } else if width > 760.0 {
         2
     } else {
         1
@@ -697,8 +700,8 @@ mod tests {
 
     #[test]
     fn grid_columns_should_scale_with_available_width() {
-        assert_eq!(grid_columns_for_width(800.0), 1);
-        assert_eq!(grid_columns_for_width(1200.0), 2);
+        assert_eq!(grid_columns_for_width(700.0), 1);
+        assert_eq!(grid_columns_for_width(900.0), 2);
         assert_eq!(grid_columns_for_width(1800.0), 3);
         assert_eq!(grid_page_size(1800.0), 6);
     }
