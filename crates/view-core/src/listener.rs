@@ -90,23 +90,41 @@ fn build_camp_watch_command() -> Command {
 fn demo_agents(step: usize) -> Vec<Agent> {
     let statuses = [
         (
-            "watcher-alpha",
+            "agentic-coding",
             "busy",
             "orchestrator",
-            "tick",
-            "feature/live-feed",
+            "workspace",
+            "feature/session-grid",
         ),
-        ("watcher-beta", "idle", "worker", "wasp", "feat/retries"),
-        ("watcher-gamma", "busy", "planner", "garc", "plan/mesh-ux"),
-        ("watcher-delta", "offline", "auditor", "camp", "main"),
         (
-            "watcher-epsilon",
+            "docs-site",
+            "idle",
+            "worker",
+            "workspace",
+            "feat/reference-pass",
+        ),
+        (
+            "api-server",
+            "busy",
+            "planner",
+            "workspace",
+            "plan/runtime-cleanup",
+        ),
+        ("mobile-app", "offline", "auditor", "workspace", "main"),
+        (
+            "infra-terraform",
             "busy",
             "reviewer",
-            "wasp",
-            "fix/cache-race",
+            "workspace",
+            "fix/state-drift",
         ),
-        ("watcher-zeta", "idle", "builder", "tick", "feat/grid-mode"),
+        (
+            "shared-lib",
+            "idle",
+            "builder",
+            "workspace",
+            "feat/desktop-preview",
+        ),
     ];
 
     statuses
@@ -118,10 +136,7 @@ fn demo_agents(step: usize) -> Vec<Agent> {
                 "tokens".to_string(),
                 format!("{}", 24_000 + (index as u64 * 13_500) + (step as u64 * 750)),
             );
-            metadata.insert(
-                "cwd".to_string(),
-                format!("/mesh/{project}/{role}/{}", index + 1),
-            );
+            metadata.insert("cwd".to_string(), format!("/Users/demo/projects/{id}"));
             metadata.insert(
                 "model".to_string(),
                 match index {
@@ -133,15 +148,17 @@ fn demo_agents(step: usize) -> Vec<Agent> {
             );
             metadata.insert(
                 "last_file".to_string(),
-                format!("/mesh/{project}/artifacts/report-{}.md", step % 5),
+                format!("/Users/demo/projects/{id}/{}", demo_file_name(index, step)),
             );
             metadata.insert(
                 "last_tool".to_string(),
                 match index {
-                    0 => "Write",
-                    1 => "Grep",
+                    0 => "Edit",
+                    1 => "Search",
                     2 => "Plan",
-                    _ => "Watch",
+                    3 => "Idle",
+                    4 => "Review",
+                    _ => "Build",
                 }
                 .to_string(),
             );
@@ -195,48 +212,48 @@ fn demo_agents(step: usize) -> Vec<Agent> {
 fn demo_events(step: usize) -> Vec<Event> {
     let scripts = [
         (
-            "watcher-alpha",
-            "tick",
+            "agentic-coding",
+            "shell",
             [
-                ("info", "$ plan --consensus"),
-                ("success", "Queued handoff for downstream planner"),
-                ("error", "Retry budget exhausted for job sync"),
+                ("info", "$ cargo test --workspace"),
+                ("success", "Tests completed with 0 failures"),
+                ("error", "Retry budget exhausted for release sync"),
             ],
         ),
         (
-            "watcher-beta",
-            "wasp",
+            "docs-site",
+            "shell",
             [
-                ("success", "$ cargo test --workspace"),
-                ("info", "Captured fresh mesh heartbeat"),
-                ("success", "Execution window validated successfully"),
+                ("success", "$ pnpm dev"),
+                ("info", "Preview server listening on :3000"),
+                ("success", "Reference page updated cleanly"),
             ],
         ),
         (
-            "watcher-gamma",
-            "garc",
+            "api-server",
+            "shell",
             [
-                ("warn", "$ review dependency graph"),
-                ("warn", "Dependency scan found a stale branch"),
-                ("success", "Plan merged into orchestration lane"),
+                ("warn", "$ cargo check"),
+                ("warn", "Borrow checker still unhappy in auth flow"),
+                ("success", "Handler plan merged into runtime lane"),
             ],
         ),
         (
-            "watcher-epsilon",
-            "wasp",
+            "infra-terraform",
+            "shell",
             [
-                ("warn", "$ reproduce cache race"),
-                ("info", "Patch candidate applied in sandbox"),
-                ("success", "Regression script completed"),
+                ("warn", "$ terraform plan"),
+                ("info", "State drift detected in staging"),
+                ("success", "Review checklist completed"),
             ],
         ),
         (
-            "watcher-zeta",
-            "tick",
+            "shared-lib",
+            "shell",
             [
-                ("info", "$ render desktop preview"),
-                ("success", "Screenshot harness emitted native frame"),
-                ("info", "Grid density pass ready for review"),
+                ("info", "$ cargo doc --open"),
+                ("success", "Desktop preview rendered successfully"),
+                ("info", "Public API draft ready for review"),
             ],
         ),
     ];
@@ -256,6 +273,47 @@ fn demo_events(step: usize) -> Vec<Event> {
             }
         })
         .collect()
+}
+
+fn demo_file_name(index: usize, step: usize) -> &'static str {
+    let files = [
+        [
+            "src/main.rs",
+            "src/session.rs",
+            "Cargo.toml",
+            "README.md",
+            "src/ui.rs",
+        ],
+        [
+            "app/routes/docs.tsx",
+            "content/api.md",
+            "package.json",
+            "README.md",
+            "app/layout.tsx",
+        ],
+        [
+            "src/auth.rs",
+            "src/server.rs",
+            "src/routes.rs",
+            "Cargo.toml",
+            "src/lib.rs",
+        ],
+        [
+            "infra/main.tf",
+            "infra/variables.tf",
+            "README.md",
+            "envs/staging.tfvars",
+            "modules/vpc/main.tf",
+        ],
+        [
+            "src/lib.rs",
+            "src/terminal.rs",
+            "README.md",
+            "src/theme.rs",
+            "Cargo.toml",
+        ],
+    ];
+    files[index % files.len()][step % files[0].len()]
 }
 
 pub async fn start_demo_listener(
@@ -452,7 +510,7 @@ mod tests {
             .any(|agent| agent.status.eq_ignore_ascii_case("offline")));
         assert!(agents.iter().all(|agent| !agent.activity.is_empty()));
         assert_eq!(events.len(), 5);
-        assert!(events.iter().any(|event| event.component == "tick"));
+        assert!(events.iter().all(|event| event.component == "shell"));
         assert!(events.iter().any(|event| event.level == "success"));
     }
 }
