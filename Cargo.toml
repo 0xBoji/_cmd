@@ -1,16 +1,14 @@
-[package]
-name = "visual_interception_event_window"
-version = "0.1.0"
-edition = "2021"
-description = "Observability Layer (Pillar 8) for the RAI ecosystem."
+[workspace]
+members = [
+  "crates/view-core",
+  "crates/view-cli",
+  "crates/view-desktop",
+]
+resolver = "2"
 
-[dependencies]
-ratatui = "0.26"
-crossterm = "0.27"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-anyhow = "1"
-chrono = { version = "0.4", features = ["serde"] }
-rand = "0.10.0"
-rand_chacha = "0.10.0"
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+description = "VIEW mission-control workspace"
+rust-version = "1.78"

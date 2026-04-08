@@ -1,0 +1,499 @@
+use eframe::egui::{self, Align, Color32, Frame, Layout, RichText, ScrollArea, Stroke, Vec2};
+use std::sync::Arc;
+use std::thread;
+use tokio::runtime::Builder;
+use tokio::sync::Mutex;
+use tokio::time::{self, Duration};
+use view_core::{
+    app::{Agent, AppState, ViewMode},
+    listener,
+};
+
+const BG_APP: Color32 = Color32::from_rgb(18, 21, 31);
+const BG_PANEL: Color32 = Color32::from_rgb(24, 28, 40);
+const BG_PANEL_ALT: Color32 = Color32::from_rgb(32, 37, 54);
+const FG_PRIMARY: Color32 = Color32::from_rgb(234, 238, 255);
+const FG_MUTED: Color32 = Color32::from_rgb(145, 154, 188);
+const ACCENT: Color32 = Color32::from_rgb(108, 92, 231);
+const ACCENT_ALT: Color32 = Color32::from_rgb(76, 201, 240);
+const ACCENT_ALT_2: Color32 = Color32::from_rgb(255, 122, 198);
+const SUCCESS: Color32 = Color32::from_rgb(109, 234, 170);
+const WARNING: Color32 = Color32::from_rgb(255, 184, 76);
+const OFFLINE: Color32 = Color32::from_rgb(122, 128, 158);
+const DANGER: Color32 = Color32::from_rgb(255, 96, 96);
+
+pub struct ViewDesktopApp {
+    state: Arc<Mutex<AppState>>,
+    search_buffer: String,
+}
+
+impl ViewDesktopApp {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        configure_theme(&cc.egui_ctx);
+
+        let state = Arc::new(Mutex::new(AppState::new()));
+        spawn_core_runtime(state.clone());
+
+        Self {
+            state,
+            search_buffer: String::new(),
+        }
+    }
+}
+
+impl eframe::App for ViewDesktopApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.request_repaint_after(Duration::from_millis(120));
+
+        let mut state = self.state.blocking_lock();
+        let search_buffer = &mut self.search_buffer;
+
+        egui::TopBottomPanel::top("header")
+            .frame(
+                Frame::none()
+                    .fill(BG_PANEL_ALT)
+                    .stroke(Stroke::new(1.0, ACCENT)),
+            )
+            .show(ctx, |ui| render_header(ui, &mut state, search_buffer));
+
+        egui::TopBottomPanel::bottom("footer")
+            .frame(Frame::none().fill(BG_PANEL_ALT))
+            .show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Tab/grid/focus").color(FG_MUTED));
+                    ui.separator();
+                    ui.label(RichText::new("filter").color(FG_MUTED));
+                    ui.separator();
+                    ui.label(RichText::new("search").color(FG_MUTED));
+                    ui.separator();
+                    ui.label(
+                        RichText::new(format!(
+                            "mode:{} • filter:{} • visible:{}",
+                            match state.view_mode {
+                                ViewMode::Grid => "grid",
+                                ViewMode::Focus => "focus",
+                            },
+                            state.filter_label(),
+                            state.visible_agent_count()
+                        ))
+                        .color(FG_MUTED),
+                    );
+                });
+            });
+
+        egui::CentralPanel::default()
+            .frame(Frame::none().fill(BG_APP))
+            .show(ctx, |ui| match state.view_mode {
+                ViewMode::Grid => render_grid(ui, &mut state),
+                ViewMode::Focus => render_focus(ui, &mut state),
+            });
+    }
+}
+
+fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut String) {
+    let page_size = 6;
+    let tabs = state.visible_agents_page(page_size);
+    let selected = state.get_selected_agent_id();
+
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(4.0);
+        chip(ui, "VIEW", ACCENT, true);
+        ui.label(
+            RichText::new(format!(
+                "{} sessions • {} visible",
+                state.agents.len(),
+                state.visible_agent_count()
+            ))
+            .color(FG_MUTED),
+        );
+
+        for (index, agent_id) in tabs.iter().enumerate() {
+            let is_selected = selected.as_deref() == Some(agent_id.as_str());
+            if tab_chip(ui, agent_id, is_selected).clicked() {
+                let base = state.current_grid_page(page_size) * page_size;
+                state.select_visible_index(base + index);
+            }
+        }
+
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let search = ui.add_sized(
+                [220.0, 28.0],
+                egui::TextEdit::singleline(search_buffer).hint_text("search sessions"),
+            );
+            if search.changed() {
+                state.set_search_query(search_buffer);
+            }
+
+            if ui.button("focus").clicked() {
+                state.view_mode = ViewMode::Focus;
+            }
+            if ui.button("grid").clicked() {
+                state.view_mode = ViewMode::Grid;
+            }
+            if ui.button("filter").clicked() {
+                state.cycle_filter_mode();
+            }
+
+            ui.label(
+                RichText::new(format!("filter:{}", state.filter_label()))
+                    .monospace()
+                    .color(FG_MUTED),
+            );
+        });
+    });
+}
+
+fn render_grid(ui: &mut egui::Ui, state: &mut AppState) {
+    let columns = if ui.available_width() > 1650.0 {
+        3usize
+    } else if ui.available_width() > 980.0 {
+        2usize
+    } else {
+        1usize
+    };
+    let rows = 2usize;
+    let page_size = columns * rows;
+    let ids = state.visible_agents_page(page_size);
+    let selected = state.get_selected_agent_id();
+
+    ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("desktop-grid")
+                .num_columns(columns)
+                .spacing(Vec2::new(12.0, 12.0))
+                .show(ui, |ui| {
+                    for (index, id) in ids.iter().enumerate() {
+                        if let Some(agent) = state.agents.get(id).cloned() {
+                            let is_selected = selected.as_deref() == Some(id.as_str());
+                            render_tile(ui, &agent, state, is_selected, index);
+                        } else {
+                            ui.allocate_space(Vec2::new(360.0, 250.0));
+                        }
+
+                        if (index + 1) % columns == 0 {
+                            ui.end_row();
+                        }
+                    }
+                });
+        });
+}
+
+fn render_focus(ui: &mut egui::Ui, state: &mut AppState) {
+    ui.columns(2, |columns| {
+        columns[0].heading("Sessions");
+        for (index, id) in state.visible_agent_ids().iter().enumerate() {
+            let selected = state.get_selected_agent_id().as_deref() == Some(id.as_str());
+            if columns[0]
+                .selectable_label(selected, id)
+                .on_hover_text("Select session")
+                .clicked()
+            {
+                state.select_visible_index(index);
+            }
+        }
+
+        columns[1].heading("Detail");
+        if let Some(agent) = state.get_selected_agent().cloned() {
+            render_focus_detail(&mut columns[1], &agent, state);
+        } else {
+            columns[1].label("No session selected.");
+        }
+    });
+}
+
+fn configure_theme(ctx: &egui::Context) {
+    let mut visuals = egui::Visuals::dark();
+    visuals.override_text_color = Some(FG_PRIMARY);
+    visuals.panel_fill = BG_APP;
+    visuals.widgets.noninteractive.bg_fill = BG_PANEL;
+    visuals.widgets.inactive.bg_fill = BG_PANEL_ALT;
+    visuals.widgets.active.bg_fill = ACCENT;
+    visuals.widgets.hovered.bg_fill = BG_PANEL;
+    visuals.widgets.inactive.fg_stroke.color = FG_PRIMARY;
+    visuals.window_fill = BG_APP;
+    visuals.selection.bg_fill = ACCENT;
+    visuals.selection.stroke = Stroke::new(1.5, ACCENT_ALT);
+    ctx.set_visuals(visuals);
+}
+
+fn chip(ui: &mut egui::Ui, label: &str, color: Color32, filled: bool) {
+    let text = RichText::new(label)
+        .strong()
+        .color(if filled { BG_APP } else { color });
+    let frame = Frame::none()
+        .fill(if filled { color } else { BG_PANEL_ALT })
+        .stroke(Stroke::new(1.0, color))
+        .rounding(10.0)
+        .inner_margin(egui::Margin::symmetric(8.0, 4.0));
+    frame.show(ui, |ui| {
+        ui.label(text);
+    });
+}
+
+fn tab_chip(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
+    let text = RichText::new(label)
+        .strong()
+        .color(if selected { BG_APP } else { FG_PRIMARY });
+    egui::Frame::none()
+        .fill(if selected { ACCENT_ALT } else { BG_PANEL_ALT })
+        .stroke(Stroke::new(1.0, if selected { ACCENT_ALT } else { ACCENT }))
+        .rounding(10.0)
+        .inner_margin(egui::Margin::symmetric(8.0, 4.0))
+        .show(ui, |ui| ui.button(text))
+        .inner
+}
+
+fn render_tile(
+    ui: &mut egui::Ui,
+    agent: &Agent,
+    state: &mut AppState,
+    selected: bool,
+    visible_index: usize,
+) {
+    let border = if selected { ACCENT_ALT } else { ACCENT };
+    let fill = if selected { BG_PANEL } else { BG_PANEL_ALT };
+    let events = state.get_recent_events(Some(&agent.id), 4);
+    let status = status_color(agent);
+    let messages = agent
+        .metadata
+        .get("messages")
+        .cloned()
+        .unwrap_or_else(|| "-".to_string());
+    let last_tool = agent
+        .metadata
+        .get("last_tool")
+        .cloned()
+        .unwrap_or_else(|| "idle".to_string());
+
+    let response = Frame::none()
+        .fill(fill)
+        .stroke(Stroke::new(if selected { 2.0 } else { 1.0 }, border))
+        .rounding(12.0)
+        .inner_margin(egui::Margin::same(12.0))
+        .show(ui, |ui| {
+            ui.set_min_size(Vec2::new(360.0, 255.0));
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("●").color(status).size(16.0));
+                ui.label(RichText::new(&agent.id).strong().size(18.0));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    chip(
+                        ui,
+                        &agent.status.to_uppercase(),
+                        if selected { ACCENT_ALT } else { status },
+                        false,
+                    );
+                });
+            });
+            ui.label(
+                RichText::new(format!(
+                    "{}/{} • {} • {}",
+                    agent.project, agent.role, last_tool, agent.branch
+                ))
+                .color(FG_MUTED),
+            );
+            ui.separator();
+            ui.label(
+                RichText::new(format!("activity {}", trendline(agent, 32)))
+                    .monospace()
+                    .color(status),
+            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("tokens {}", agent.tokens))
+                        .monospace()
+                        .color(FG_PRIMARY),
+                );
+                ui.separator();
+                ui.label(
+                    RichText::new(format!("msgs {}", messages))
+                        .monospace()
+                        .color(FG_MUTED),
+                );
+                ui.separator();
+                ui.label(
+                    RichText::new(
+                        agent
+                            .metadata
+                            .get("cwd")
+                            .map_or_else(|| "-".to_string(), |cwd| truncate_path(cwd, 24)),
+                    )
+                    .monospace()
+                    .color(FG_MUTED),
+                );
+            });
+            ui.separator();
+
+            for event in events {
+                ui.label(
+                    RichText::new(format!(
+                        "[{}] {}",
+                        event.component.to_uppercase(),
+                        trim_line(&event.payload, 48)
+                    ))
+                    .monospace()
+                    .color(level_color(&event.level)),
+                );
+            }
+
+            ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
+                ui.separator();
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("click").monospace().color(ACCENT_ALT_2));
+                    ui.label(RichText::new("select").monospace().color(FG_MUTED));
+                    ui.separator();
+                    ui.label(RichText::new("focus").monospace().color(ACCENT_ALT_2));
+                    ui.label(RichText::new("inspect").monospace().color(FG_MUTED));
+                });
+            });
+        })
+        .response;
+
+    if response.clicked() {
+        state.select_visible_index(visible_index);
+    }
+}
+
+fn render_focus_detail(ui: &mut egui::Ui, agent: &Agent, state: &AppState) {
+    Frame::none()
+        .fill(BG_PANEL_ALT)
+        .stroke(Stroke::new(1.0, ACCENT))
+        .rounding(12.0)
+        .inner_margin(egui::Margin::same(14.0))
+        .show(ui, |ui| {
+            ui.label(RichText::new(&agent.id).strong().size(22.0));
+            ui.label(RichText::new(format!("{} · {}", agent.project, agent.role)).color(FG_MUTED));
+            ui.separator();
+            ui.monospace(format!("status    {}", agent.status));
+            ui.monospace(format!("branch    {}", agent.branch));
+            ui.monospace(format!("tokens    {}", agent.tokens));
+            ui.monospace(format!(
+                "cwd       {}",
+                agent.metadata.get("cwd").cloned().unwrap_or_default()
+            ));
+            ui.monospace(format!(
+                "model     {}",
+                agent.metadata.get("model").cloned().unwrap_or_default()
+            ));
+            ui.separator();
+
+            for event in state.get_recent_events(Some(&agent.id), 8) {
+                ui.label(
+                    RichText::new(format!(
+                        "[{}] {}",
+                        event.component.to_uppercase(),
+                        trim_line(&event.payload, 78)
+                    ))
+                    .monospace()
+                    .color(level_color(&event.level)),
+                );
+            }
+        });
+}
+
+fn status_color(agent: &Agent) -> Color32 {
+    match agent.status.to_ascii_lowercase().as_str() {
+        "busy" => WARNING,
+        "offline" => OFFLINE,
+        _ => SUCCESS,
+    }
+}
+
+fn level_color(level: &str) -> Color32 {
+    match level.to_ascii_lowercase().as_str() {
+        "error" => DANGER,
+        "warn" => Color32::YELLOW,
+        "success" => SUCCESS,
+        _ => ACCENT_ALT,
+    }
+}
+
+fn trim_line(value: &str, max_chars: usize) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    if chars.len() <= max_chars {
+        return value.to_string();
+    }
+
+    chars[..max_chars.saturating_sub(1)]
+        .iter()
+        .collect::<String>()
+        + "…"
+}
+
+fn truncate_path(value: &str, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        return value.to_string();
+    }
+
+    let suffix = value
+        .chars()
+        .rev()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    format!("…{suffix}")
+}
+
+fn trendline(agent: &Agent, width: usize) -> String {
+    let values = agent.activity.iter().copied().collect::<Vec<_>>();
+    let start = values.len().saturating_sub(width);
+    let slice = &values[start..];
+    let max = slice.iter().copied().max().unwrap_or(0);
+    let blocks = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+    slice
+        .iter()
+        .map(|value| {
+            if max == 0 {
+                '·'
+            } else {
+                let index = ((*value * (blocks.len() as u64 - 1)) / max) as usize;
+                blocks[index]
+            }
+        })
+        .collect()
+}
+
+fn spawn_core_runtime(state: Arc<Mutex<AppState>>) {
+    thread::spawn(move || {
+        let runtime = Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("desktop runtime");
+
+        runtime.block_on(async move {
+            let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(64);
+            let (agent_tx, mut agent_rx) = tokio::sync::mpsc::channel(64);
+            let use_demo = listener::demo_mode_enabled() || std::env::var("VIEW_DEMO").is_ok();
+
+            tokio::spawn(async move {
+                let _ = if use_demo {
+                    listener::start_demo_listener(event_tx, agent_tx).await
+                } else {
+                    listener::start_camp_listener(event_tx, agent_tx).await
+                };
+            });
+
+            let mut tick = time::interval(Duration::from_secs(1));
+
+            loop {
+                tokio::select! {
+                    Some(event) = event_rx.recv() => {
+                        let mut app = state.lock().await;
+                        app.add_event(event);
+                    }
+                    Some(agent) = agent_rx.recv() => {
+                        let mut app = state.lock().await;
+                        app.update_agent(agent);
+                    }
+                    _ = tick.tick() => {
+                        let mut app = state.lock().await;
+                        app.tick_activity();
+                    }
+                }
+            }
+        });
+    });
+}

@@ -1,0 +1,16 @@
+[package]
+name = "view-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core runtime and shared state for VIEW"
+readme = "../../README.md"
+keywords = ["terminal", "agents", "observability", "mesh", "workspace"]
+categories = ["command-line-interface", "development-tools"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
