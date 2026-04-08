@@ -168,12 +168,9 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
         ui.add_space(8.0);
         chip(ui, "VIEW", ACCENT, true);
         ui.label(
-            RichText::new(format!(
-                "{} sessions • {} visible",
-                state.agents.len(),
-                state.visible_agent_count()
-            ))
-            .color(FG_MUTED),
+            RichText::new(format!("{} active", state.visible_agent_count()))
+                .monospace()
+                .color(FG_MUTED),
         );
         ui.label(
             RichText::new(format!("page {current_page}/{total_pages}"))
@@ -189,9 +186,13 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
             }
         }
 
+        if chrome_button(ui, "+").clicked() {
+            state.select_first();
+        }
+
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let search = ui.add_sized(
-                [210.0, 26.0],
+                [180.0, 24.0],
                 egui::TextEdit::singleline(search_buffer)
                     .id_source("desktop_search")
                     .hint_text("search sessions"),
@@ -222,10 +223,11 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
                 state.cycle_filter_mode();
             }
 
-            ui.label(
-                RichText::new(format!("filter:{}", state.filter_label()))
-                    .monospace()
-                    .color(FG_MUTED),
+            chip(
+                ui,
+                &format!("filter:{}", state.filter_label()),
+                Color32::from_gray(90),
+                false,
             );
         });
     });

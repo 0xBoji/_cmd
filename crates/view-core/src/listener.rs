@@ -263,25 +263,37 @@ pub async fn start_demo_listener(
     agent_tx: mpsc::Sender<Agent>,
 ) -> anyhow::Result<()> {
     let mut tick = time::interval(Duration::from_millis(900));
-    let mut step = 0usize;
+    for warmup in 0..4 {
+        emit_demo_step(&tx, &agent_tx, warmup).await?;
+    }
+    let mut step = 4usize;
 
     loop {
         tick.tick().await;
-
-        for agent in demo_agents(step) {
-            if agent_tx.send(agent).await.is_err() {
-                return Ok(());
-            }
-        }
-
-        for event in demo_events(step) {
-            if tx.send(event).await.is_err() {
-                return Ok(());
-            }
-        }
+        emit_demo_step(&tx, &agent_tx, step).await?;
 
         step = step.wrapping_add(1);
     }
+}
+
+async fn emit_demo_step(
+    tx: &mpsc::Sender<Event>,
+    agent_tx: &mpsc::Sender<Agent>,
+    step: usize,
+) -> anyhow::Result<()> {
+    for agent in demo_agents(step) {
+        if agent_tx.send(agent).await.is_err() {
+            return Ok(());
+        }
+    }
+
+    for event in demo_events(step) {
+        if tx.send(event).await.is_err() {
+            return Ok(());
+        }
+    }
+
+    Ok(())
 }
 
 /// Connects to the real-time mesh via `camp watch --json`.
