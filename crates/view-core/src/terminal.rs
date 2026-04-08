@@ -30,11 +30,12 @@ pub async fn start_local_shell(
         .arg("-q")
         .arg("/dev/null")
         .arg("/bin/zsh")
-        .arg("-i")
+        .arg("-dfi")
         .current_dir(&cwd)
         .env("HOME", &shell_home)
         .env("ZDOTDIR", &shell_home)
         .env("TERM", "xterm-256color")
+        .env("PS1", "$ ")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -49,20 +50,8 @@ pub async fn start_local_shell(
         .take()
         .ok_or_else(|| anyhow::anyhow!("Failed to capture shell stdout"))?;
 
-    let _ = event_tx.send(TerminalEvent::Status("running".to_string()));
+    let _ = event_tx.send(TerminalEvent::Status("ready".to_string()));
     let _ = event_tx.send(TerminalEvent::Cwd(cwd.display().to_string()));
-
-    let startup_commands = [
-        "printf 'VIEW shell ready\\n'",
-        "pwd",
-        "printf 'Type commands in desktop focus mode and press Enter.\\n'",
-    ];
-
-    for command in startup_commands {
-        stdin.write_all(command.as_bytes()).await?;
-        stdin.write_all(b"\n").await?;
-    }
-    stdin.flush().await?;
 
     let reader_task = {
         let event_tx = event_tx.clone();
@@ -144,5 +133,11 @@ mod tests {
     fn sanitize_terminal_line_should_strip_ansi_and_backspaces() {
         let line = "\u{1b}[32mVIEW\u{1b}[0m sh\u{8}hell ready\r$ echo hi";
         assert_eq!(sanitize_terminal_line(line), "$ echo hi");
+    }
+
+    #[test]
+    fn sanitize_terminal_line_should_drop_empty_escape_only_lines() {
+        let line = "\u{1b}[?2004h\u{1b}[?2004l";
+        assert_eq!(sanitize_terminal_line(line), "");
     }
 }
