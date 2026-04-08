@@ -192,55 +192,70 @@ fn demo_agents(step: usize) -> Vec<Agent> {
         .collect()
 }
 
-fn demo_event(step: usize) -> Event {
-    let script = [
+fn demo_events(step: usize) -> Vec<Event> {
+    let scripts = [
         (
             "watcher-alpha",
             "tick",
-            "info",
-            "Queued handoff for downstream planner",
+            [
+                ("info", "$ plan --consensus"),
+                ("success", "Queued handoff for downstream planner"),
+                ("error", "Retry budget exhausted for job sync"),
+            ],
         ),
         (
             "watcher-beta",
             "wasp",
-            "success",
-            "Execution window validated successfully",
+            [
+                ("success", "$ cargo test --workspace"),
+                ("info", "Captured fresh mesh heartbeat"),
+                ("success", "Execution window validated successfully"),
+            ],
         ),
         (
             "watcher-gamma",
             "garc",
-            "warn",
-            "Dependency scan found a stale branch",
+            [
+                ("warn", "$ review dependency graph"),
+                ("warn", "Dependency scan found a stale branch"),
+                ("success", "Plan merged into orchestration lane"),
+            ],
         ),
         (
-            "watcher-alpha",
-            "tick",
-            "error",
-            "Retry budget exhausted for job sync",
-        ),
-        (
-            "watcher-beta",
+            "watcher-epsilon",
             "wasp",
-            "info",
-            "Captured fresh mesh heartbeat",
+            [
+                ("warn", "$ reproduce cache race"),
+                ("info", "Patch candidate applied in sandbox"),
+                ("success", "Regression script completed"),
+            ],
         ),
         (
-            "watcher-gamma",
-            "garc",
-            "success",
-            "Plan merged into orchestration lane",
+            "watcher-zeta",
+            "tick",
+            [
+                ("info", "$ render desktop preview"),
+                ("success", "Screenshot harness emitted native frame"),
+                ("info", "Grid density pass ready for review"),
+            ],
         ),
     ];
-    let (agent_id, component, level, payload) = script[step % script.len()];
 
-    Event {
-        timestamp: Local::now(),
-        agent_id: agent_id.to_string(),
-        kind: "UPDATED".to_string(),
-        component: component.to_string(),
-        level: level.to_string(),
-        payload: payload.to_string(),
-    }
+    scripts
+        .iter()
+        .enumerate()
+        .map(|(index, (agent_id, component, script))| {
+            let (level, payload) = script[(step + index) % script.len()];
+            Event {
+                timestamp: Local::now(),
+                agent_id: (*agent_id).to_string(),
+                kind: "UPDATED".to_string(),
+                component: (*component).to_string(),
+                level: level.to_string(),
+                payload: payload.to_string(),
+            }
+        })
+        .collect()
 }
 
 pub async fn start_demo_listener(
@@ -259,8 +274,10 @@ pub async fn start_demo_listener(
             }
         }
 
-        if tx.send(demo_event(step)).await.is_err() {
-            return Ok(());
+        for event in demo_events(step) {
+            if tx.send(event).await.is_err() {
+                return Ok(());
+            }
         }
 
         step = step.wrapping_add(1);
@@ -326,7 +343,7 @@ pub async fn start_camp_listener(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_event_from_agent_record, camp_watch_command_config, demo_agents, demo_event,
+        build_event_from_agent_record, camp_watch_command_config, demo_agents, demo_events,
         demo_mode_from_value,
     };
     use crate::app::{Agent, EventRecord};
@@ -412,7 +429,7 @@ mod tests {
     #[test]
     fn demo_dataset_should_cover_multiple_agents_and_levels() {
         let agents = demo_agents(2);
-        let event = demo_event(3);
+        let events = demo_events(3);
 
         assert_eq!(agents.len(), 6);
         assert!(agents
@@ -422,7 +439,8 @@ mod tests {
             .iter()
             .any(|agent| agent.status.eq_ignore_ascii_case("offline")));
         assert!(agents.iter().all(|agent| !agent.activity.is_empty()));
-        assert_eq!(event.level, "error");
-        assert_eq!(event.component, "tick");
+        assert_eq!(events.len(), 5);
+        assert!(events.iter().any(|event| event.component == "tick"));
+        assert!(events.iter().any(|event| event.level == "success"));
     }
 }

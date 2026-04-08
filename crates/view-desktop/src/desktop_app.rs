@@ -16,14 +16,16 @@ use view_core::{
     listener,
 };
 
-const BG_APP: Color32 = Color32::from_rgb(18, 21, 31);
-const BG_PANEL: Color32 = Color32::from_rgb(24, 28, 40);
-const BG_PANEL_ALT: Color32 = Color32::from_rgb(32, 37, 54);
+const BG_APP: Color32 = Color32::from_rgb(10, 11, 14);
+const BG_CHROME: Color32 = Color32::from_rgb(32, 32, 35);
+const BG_PANEL: Color32 = Color32::from_rgb(7, 8, 12);
+const BG_PANEL_ALT: Color32 = Color32::from_rgb(17, 19, 26);
 const FG_PRIMARY: Color32 = Color32::from_rgb(234, 238, 255);
 const FG_MUTED: Color32 = Color32::from_rgb(145, 154, 188);
 const ACCENT: Color32 = Color32::from_rgb(108, 92, 231);
 const ACCENT_ALT: Color32 = Color32::from_rgb(76, 201, 240);
 const ACCENT_ALT_2: Color32 = Color32::from_rgb(255, 122, 198);
+const SPLIT_LINE: Color32 = Color32::from_rgb(145, 255, 120);
 const SUCCESS: Color32 = Color32::from_rgb(109, 234, 170);
 const WARNING: Color32 = Color32::from_rgb(255, 184, 76);
 const OFFLINE: Color32 = Color32::from_rgb(122, 128, 158);
@@ -68,20 +70,21 @@ impl eframe::App for ViewDesktopApp {
         egui::TopBottomPanel::top("header")
             .frame(
                 Frame::new()
-                    .fill(BG_PANEL_ALT)
-                    .stroke(Stroke::new(1.0, ACCENT)),
+                    .fill(BG_CHROME)
+                    .stroke(Stroke::new(1.0, SPLIT_LINE)),
             )
             .show(ctx, |ui| render_header(ui, &mut state, search_buffer));
 
         egui::TopBottomPanel::bottom("footer")
-            .frame(Frame::new().fill(BG_PANEL_ALT))
+            .frame(Frame::new().fill(BG_CHROME))
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("Tab/grid/focus").color(FG_MUTED));
-                    ui.separator();
-                    ui.label(RichText::new("filter").color(FG_MUTED));
-                    ui.separator();
-                    ui.label(RichText::new("search").color(FG_MUTED));
+                    command_badge(ui, "tab", "focus");
+                    command_badge(ui, "f", "filter");
+                    command_badge(ui, "/", "search");
+                    command_badge(ui, "j/k", "move");
+                    command_badge(ui, "pgup", "prev");
+                    command_badge(ui, "pgdn", "next");
                     ui.separator();
                     ui.label(
                         RichText::new(format!(
@@ -93,6 +96,7 @@ impl eframe::App for ViewDesktopApp {
                             state.filter_label(),
                             state.visible_agent_count()
                         ))
+                        .monospace()
                         .color(FG_MUTED),
                     );
                 });
@@ -160,6 +164,8 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
 
     ui.horizontal_wrapped(|ui| {
         ui.add_space(4.0);
+        traffic_lights(ui);
+        ui.add_space(8.0);
         chip(ui, "VIEW", ACCENT, true);
         ui.label(
             RichText::new(format!(
@@ -185,7 +191,7 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let search = ui.add_sized(
-                [220.0, 28.0],
+                [210.0, 26.0],
                 egui::TextEdit::singleline(search_buffer)
                     .id_source("desktop_search")
                     .hint_text("search sessions"),
@@ -200,19 +206,19 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
                 state.end_search();
             }
 
-            if ui.button("focus").clicked() {
+            if chrome_button(ui, "focus").clicked() {
                 state.view_mode = ViewMode::Focus;
             }
-            if ui.button("grid").clicked() {
+            if chrome_button(ui, "grid").clicked() {
                 state.view_mode = ViewMode::Grid;
             }
-            if ui.button("next").clicked() {
+            if chrome_button(ui, "next").clicked() {
                 state.select_next_page();
             }
-            if ui.button("prev").clicked() {
+            if chrome_button(ui, "prev").clicked() {
                 state.select_previous_page();
             }
-            if ui.button("filter").clicked() {
+            if chrome_button(ui, "filter").clicked() {
                 state.cycle_filter_mode();
             }
 
@@ -364,16 +370,41 @@ fn chip(ui: &mut egui::Ui, label: &str, color: Color32, filled: bool) {
 }
 
 fn tab_chip(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
-    let text = RichText::new(label)
-        .strong()
-        .color(if selected { BG_APP } else { FG_PRIMARY });
+    let text = RichText::new(label).strong().color(FG_PRIMARY);
     egui::Frame::new()
-        .fill(if selected { ACCENT_ALT } else { BG_PANEL_ALT })
-        .stroke(Stroke::new(1.0, if selected { ACCENT_ALT } else { ACCENT }))
-        .corner_radius(10.0)
-        .inner_margin(egui::Margin::symmetric(8, 4))
+        .fill(if selected { BG_PANEL_ALT } else { BG_CHROME })
+        .stroke(Stroke::new(
+            1.0,
+            if selected {
+                ACCENT_ALT
+            } else {
+                Color32::from_gray(60)
+            },
+        ))
+        .corner_radius(12.0)
+        .inner_margin(egui::Margin::symmetric(10, 6))
         .show(ui, |ui| ui.button(text))
         .inner
+}
+
+fn chrome_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+    ui.add(
+        egui::Button::new(RichText::new(label).monospace().color(FG_PRIMARY))
+            .fill(BG_PANEL)
+            .stroke(Stroke::new(1.0, Color32::from_gray(80)))
+            .corner_radius(8.0)
+            .min_size(Vec2::new(34.0, 24.0)),
+    )
+}
+
+fn traffic_lights(ui: &mut egui::Ui) {
+    for color in [
+        Color32::from_rgb(255, 95, 87),
+        Color32::from_rgb(255, 189, 46),
+        Color32::from_rgb(40, 202, 64),
+    ] {
+        ui.label(RichText::new("●").color(color));
+    }
 }
 
 fn render_tile(
@@ -411,8 +442,14 @@ fn render_tile(
         .show(ui, |ui| {
             ui.set_min_size(tile_size);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("●").color(status).size(16.0));
-                ui.label(RichText::new(&agent.id).strong().size(17.0));
+                ui.label(RichText::new("◉").color(status).size(14.0));
+                ui.label(RichText::new(&agent.id).strong().size(16.0));
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!("{} lines", events.len()))
+                        .monospace()
+                        .color(FG_MUTED),
+                );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     chip(
                         ui,
@@ -427,6 +464,7 @@ fn render_tile(
                     "{}/{} • {} • {}",
                     agent.project, agent.role, last_tool, agent.branch
                 ))
+                .monospace()
                 .color(FG_MUTED),
             );
             ui.separator();
@@ -455,9 +493,10 @@ fn render_tile(
             for event in &events {
                 ui.label(
                     RichText::new(format!(
-                        "[{}] {}",
-                        event.component.to_uppercase(),
-                        trim_line(&event.payload, 48)
+                        "$ {} {}\n{}",
+                        event.component.to_lowercase(),
+                        trim_line(&event.payload, 30),
+                        trim_line(&format_output_line(event), 46)
                     ))
                     .monospace()
                     .color(level_color(&event.level)),
@@ -466,7 +505,7 @@ fn render_tile(
 
             if events.is_empty() {
                 ui.label(
-                    RichText::new("…waiting for recent transcript")
+                    RichText::new("$ idle\n…waiting for recent transcript")
                         .monospace()
                         .color(FG_MUTED),
                 );
@@ -493,14 +532,25 @@ fn render_tile(
 fn render_focus_detail(ui: &mut egui::Ui, agent: &Agent, state: &AppState) {
     Frame::new()
         .fill(BG_PANEL_ALT)
-        .stroke(Stroke::new(1.0, ACCENT))
+        .stroke(Stroke::new(1.0, SPLIT_LINE))
         .corner_radius(12.0)
         .inner_margin(egui::Margin::same(14))
         .show(ui, |ui| {
-            ui.label(RichText::new(&agent.id).strong().size(22.0));
-            ui.label(RichText::new(format!("{} · {}", agent.project, agent.role)).color(FG_MUTED));
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(&agent.id).strong().size(20.0));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    chip(ui, &agent.status.to_uppercase(), status_color(agent), false);
+                });
+            });
+            ui.label(
+                RichText::new(format!(
+                    "{} · {} · {}",
+                    agent.project, agent.role, agent.branch
+                ))
+                .monospace()
+                .color(FG_MUTED),
+            );
             ui.separator();
-            ui.monospace(format!("status    {}", agent.status));
             ui.monospace(format!("branch    {}", agent.branch));
             ui.monospace(format!("tokens    {}", agent.tokens));
             ui.monospace(format!(
@@ -516,9 +566,10 @@ fn render_focus_detail(ui: &mut egui::Ui, agent: &Agent, state: &AppState) {
             for event in state.get_recent_events(Some(&agent.id), 8) {
                 ui.label(
                     RichText::new(format!(
-                        "[{}] {}",
-                        event.component.to_uppercase(),
-                        trim_line(&event.payload, 78)
+                        "$ {} {}\n{}",
+                        event.component.to_lowercase(),
+                        trim_line(&event.payload, 42),
+                        trim_line(&format_output_line(event), 86)
                     ))
                     .monospace()
                     .color(level_color(&event.level)),
@@ -541,6 +592,15 @@ fn level_color(level: &str) -> Color32 {
         "warn" => Color32::YELLOW,
         "success" => SUCCESS,
         _ => ACCENT_ALT,
+    }
+}
+
+fn format_output_line(event: &view_core::app::Event) -> String {
+    match event.level.as_str() {
+        "error" => format!("error: {}", event.payload),
+        "warn" => format!("warn: {}", event.payload),
+        "success" => format!("ok: {}", event.payload),
+        _ => format!("out: {}", event.payload),
     }
 }
 
@@ -608,6 +668,15 @@ fn grid_rows() -> usize {
 
 fn grid_page_size(width: f32) -> usize {
     grid_columns_for_width(width) * grid_rows()
+}
+
+fn command_badge(ui: &mut egui::Ui, key: &str, label: &str) {
+    ui.group(|ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(key).monospace().strong().color(FG_PRIMARY));
+            ui.label(RichText::new(label).color(FG_MUTED));
+        });
+    });
 }
 
 fn spawn_core_runtime(state: Arc<Mutex<AppState>>) {
