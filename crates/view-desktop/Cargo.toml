@@ -13,3 +13,4 @@ view-core = { path = "../view-core" }
 eframe = { version = "0.27", features = ["__screenshot"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
+image = { version = "0.24", default-features = false, features = ["png"] }

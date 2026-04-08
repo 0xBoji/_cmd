@@ -1,4 +1,9 @@
-use eframe::egui::{self, Align, Color32, Frame, Key, Layout, RichText, ScrollArea, Stroke, Vec2};
+use eframe::egui::{
+    self, Align, Color32, Event, Frame, Key, Layout, RichText, ScrollArea, Stroke, Vec2,
+    ViewportCommand,
+};
+use image::{ImageBuffer, Rgba};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use tokio::runtime::Builder;
@@ -25,6 +30,9 @@ const DANGER: Color32 = Color32::from_rgb(255, 96, 96);
 pub struct ViewDesktopApp {
     state: Arc<Mutex<AppState>>,
     search_buffer: String,
+    frame_count: u64,
+    screenshot_requested: bool,
+    screenshot_target: Option<PathBuf>,
 }
 
 impl ViewDesktopApp {
@@ -37,6 +45,9 @@ impl ViewDesktopApp {
         Self {
             state,
             search_buffer: String::new(),
+            frame_count: 0,
+            screenshot_requested: false,
+            screenshot_target: screenshot_target(),
         }
     }
 }
@@ -44,6 +55,7 @@ impl ViewDesktopApp {
 impl eframe::App for ViewDesktopApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(120));
+        self.frame_count += 1;
 
         let mut state = self.state.blocking_lock();
         let search_buffer = &mut self.search_buffer;
@@ -88,6 +100,41 @@ impl eframe::App for ViewDesktopApp {
                 ViewMode::Grid => render_grid(ui, &mut state),
                 ViewMode::Focus => render_focus(ui, &mut state),
             });
+
+        drop(state);
+        self.maybe_capture_screenshot(ctx);
+    }
+}
+
+impl ViewDesktopApp {
+    fn maybe_capture_screenshot(&mut self, ctx: &egui::Context) {
+        let Some(path) = self.screenshot_target.clone() else {
+            return;
+        };
+
+        if !self.screenshot_requested && self.frame_count >= 6 {
+            eprintln!(
+                "desktop screenshot: requesting viewport screenshot at frame {}",
+                self.frame_count
+            );
+            ctx.send_viewport_cmd(ViewportCommand::Screenshot);
+            self.screenshot_requested = true;
+            return;
+        }
+
+        let events = ctx.input(|input| input.events.clone());
+        for event in events {
+            if let Event::Screenshot { image, .. } = event {
+                eprintln!("desktop screenshot: received screenshot event");
+                if let Err(error) = save_color_image(&path, &image) {
+                    eprintln!("Failed to save desktop screenshot to {:?}: {}", path, error);
+                } else {
+                    eprintln!("Desktop screenshot saved to {:?}", path);
+                }
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+                break;
+            }
+        }
     }
 }
 
@@ -568,9 +615,35 @@ fn spawn_core_runtime(state: Arc<Mutex<AppState>>) {
     });
 }
 
+fn screenshot_target() -> Option<PathBuf> {
+    std::env::var("VIEW_DESKTOP_SCREENSHOT_TO")
+        .or_else(|_| std::env::var("EFRAME_SCREENSHOT_TO"))
+        .ok()
+        .map(PathBuf::from)
+}
+
+fn save_color_image(path: &PathBuf, image: &egui::ColorImage) -> anyhow::Result<()> {
+    let mut rgba = Vec::with_capacity(image.pixels.len() * 4);
+    for color in &image.pixels {
+        let [r, g, b, a] = color.to_array();
+        rgba.extend_from_slice(&[r, g, b, a]);
+    }
+
+    let Some(buffer) =
+        ImageBuffer::<Rgba<u8>, _>::from_raw(image.size[0] as u32, image.size[1] as u32, rgba)
+    else {
+        return Err(anyhow::anyhow!("Failed to build RGBA image buffer"));
+    };
+
+    buffer.save(path)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{grid_columns_for_width, grid_page_size, trim_line, truncate_path};
+    use super::{
+        grid_columns_for_width, grid_page_size, screenshot_target, trim_line, truncate_path,
+    };
 
     #[test]
     fn grid_columns_should_scale_with_available_width() {
@@ -584,5 +657,19 @@ mod tests {
     fn string_helpers_should_trim_without_panicking() {
         assert_eq!(trim_line("abcdef", 4), "abc…");
         assert_eq!(truncate_path("/a/very/long/path/file.rs", 10), "…h/file.rs");
+    }
+
+    #[test]
+    fn screenshot_target_should_prefer_view_desktop_specific_env() {
+        std::env::set_var("VIEW_DESKTOP_SCREENSHOT_TO", "/tmp/a.png");
+        std::env::set_var("EFRAME_SCREENSHOT_TO", "/tmp/b.png");
+
+        assert_eq!(
+            screenshot_target().as_deref(),
+            Some(std::path::Path::new("/tmp/a.png"))
+        );
+
+        std::env::remove_var("VIEW_DESKTOP_SCREENSHOT_TO");
+        std::env::remove_var("EFRAME_SCREENSHOT_TO");
     }
 }
