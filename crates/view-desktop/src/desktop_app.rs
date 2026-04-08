@@ -1,4 +1,4 @@
-use eframe::egui::{self, Align, Color32, Frame, Layout, RichText, ScrollArea, Stroke, Vec2};
+use eframe::egui::{self, Align, Color32, Frame, Key, Layout, RichText, ScrollArea, Stroke, Vec2};
 use std::sync::Arc;
 use std::thread;
 use tokio::runtime::Builder;
@@ -47,6 +47,7 @@ impl eframe::App for ViewDesktopApp {
 
         let mut state = self.state.blocking_lock();
         let search_buffer = &mut self.search_buffer;
+        handle_shortcuts(ctx, &mut state, search_buffer);
 
         egui::TopBottomPanel::top("header")
             .frame(
@@ -91,9 +92,11 @@ impl eframe::App for ViewDesktopApp {
 }
 
 fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut String) {
-    let page_size = 6;
+    let page_size = grid_page_size(ui.available_width());
     let tabs = state.visible_agents_page(page_size);
     let selected = state.get_selected_agent_id();
+    let current_page = state.current_grid_page(page_size) + 1;
+    let total_pages = state.grid_page_count(page_size);
 
     ui.horizontal_wrapped(|ui| {
         ui.add_space(4.0);
@@ -105,6 +108,11 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
                 state.visible_agent_count()
             ))
             .color(FG_MUTED),
+        );
+        ui.label(
+            RichText::new(format!("page {current_page}/{total_pages}"))
+                .monospace()
+                .color(FG_MUTED),
         );
 
         for (index, agent_id) in tabs.iter().enumerate() {
@@ -118,10 +126,18 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let search = ui.add_sized(
                 [220.0, 28.0],
-                egui::TextEdit::singleline(search_buffer).hint_text("search sessions"),
+                egui::TextEdit::singleline(search_buffer)
+                    .id_source("desktop_search")
+                    .hint_text("search sessions"),
             );
+            if state.search_mode && !search.has_focus() {
+                search.request_focus();
+            }
             if search.changed() {
                 state.set_search_query(search_buffer);
+            }
+            if search.lost_focus() && state.search_mode {
+                state.end_search();
             }
 
             if ui.button("focus").clicked() {
@@ -129,6 +145,12 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
             }
             if ui.button("grid").clicked() {
                 state.view_mode = ViewMode::Grid;
+            }
+            if ui.button("next").clicked() {
+                state.select_next_page();
+            }
+            if ui.button("prev").clicked() {
+                state.select_previous_page();
             }
             if ui.button("filter").clicked() {
                 state.cycle_filter_mode();
@@ -144,14 +166,8 @@ fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut St
 }
 
 fn render_grid(ui: &mut egui::Ui, state: &mut AppState) {
-    let columns = if ui.available_width() > 1650.0 {
-        3usize
-    } else if ui.available_width() > 980.0 {
-        2usize
-    } else {
-        1usize
-    };
-    let rows = 2usize;
+    let columns = grid_columns_for_width(ui.available_width());
+    let rows = grid_rows();
     let page_size = columns * rows;
     let ids = state.visible_agents_page(page_size);
     let selected = state.get_selected_agent_id();
@@ -200,6 +216,42 @@ fn render_focus(ui: &mut egui::Ui, state: &mut AppState) {
             columns[1].label("No session selected.");
         }
     });
+}
+
+fn handle_shortcuts(ctx: &egui::Context, state: &mut AppState, search_buffer: &mut String) {
+    if ctx.input(|input| input.key_pressed(Key::Tab)) {
+        state.toggle_view_mode();
+    }
+
+    if ctx.input(|input| input.key_pressed(Key::ArrowDown) || input.key_pressed(Key::J)) {
+        state.select_next();
+    }
+
+    if ctx.input(|input| input.key_pressed(Key::ArrowUp) || input.key_pressed(Key::K)) {
+        state.select_previous();
+    }
+
+    if ctx.input(|input| input.key_pressed(Key::PageDown)) {
+        state.select_next_page();
+    }
+
+    if ctx.input(|input| input.key_pressed(Key::PageUp)) {
+        state.select_previous_page();
+    }
+
+    if ctx.input(|input| input.key_pressed(Key::F)) {
+        state.cycle_filter_mode();
+    }
+
+    if ctx.input(|input| input.key_pressed(Key::Slash)) {
+        state.begin_search();
+    }
+
+    if ctx.input(|input| input.key_pressed(Key::Escape)) {
+        state.clear_search_query();
+        search_buffer.clear();
+        state.end_search();
+    }
 }
 
 fn configure_theme(ctx: &egui::Context) {
@@ -456,6 +508,24 @@ fn trendline(agent: &Agent, width: usize) -> String {
         .collect()
 }
 
+fn grid_columns_for_width(width: f32) -> usize {
+    if width > 1600.0 {
+        3
+    } else if width > 980.0 {
+        2
+    } else {
+        1
+    }
+}
+
+fn grid_rows() -> usize {
+    2
+}
+
+fn grid_page_size(width: f32) -> usize {
+    grid_columns_for_width(width) * grid_rows()
+}
+
 fn spawn_core_runtime(state: Arc<Mutex<AppState>>) {
     thread::spawn(move || {
         let runtime = Builder::new_multi_thread()
@@ -496,4 +566,23 @@ fn spawn_core_runtime(state: Arc<Mutex<AppState>>) {
             }
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{grid_columns_for_width, grid_page_size, trim_line, truncate_path};
+
+    #[test]
+    fn grid_columns_should_scale_with_available_width() {
+        assert_eq!(grid_columns_for_width(800.0), 1);
+        assert_eq!(grid_columns_for_width(1200.0), 2);
+        assert_eq!(grid_columns_for_width(1800.0), 3);
+        assert_eq!(grid_page_size(1800.0), 6);
+    }
+
+    #[test]
+    fn string_helpers_should_trim_without_panicking() {
+        assert_eq!(trim_line("abcdef", 4), "abc…");
+        assert_eq!(truncate_path("/a/very/long/path/file.rs", 10), "…h/file.rs");
+    }
 }
