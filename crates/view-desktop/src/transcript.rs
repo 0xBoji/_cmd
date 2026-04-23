@@ -29,7 +29,6 @@ pub fn command_block_has_error(lines: &[&str], prompt_index: usize) -> bool {
         .any(|line| is_error_output_line(line))
 }
 
-#[cfg(test)]
 pub fn should_render_block_separator(
     previous_block_had_error: bool,
     current_block_has_error: bool,
