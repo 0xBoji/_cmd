@@ -1,0 +1,25 @@
+[package]
+name = "view-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LAN web server for VIEW — Axum + WebSocket remote access"
+readme = "../../README.md"
+keywords = ["web", "websocket", "axum", "observability", "lan"]
+categories = ["web-programming", "development-tools"]
+
+[lib]
+name = "view_web"
+path = "src/lib.rs"
+
+[dependencies]
+view-core = { path = "../view-core" }
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5", features = ["cors"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

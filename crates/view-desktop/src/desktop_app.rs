@@ -668,6 +668,18 @@ fn spawn_core_runtime(state: Arc<Mutex<AppState>>) -> Vec<terminal::TerminalComm
             let (terminal_event_tx, mut terminal_event_rx) = tokio::sync::mpsc::unbounded_channel();
             let use_demo = listener::demo_mode_enabled() || std::env::var("VIEW_DEMO").is_ok();
 
+            // Spawn LAN web server (REST + WebSocket) on a background task.
+            let web_state = state.clone();
+            let web_port: u16 = std::env::var("VIEW_WEB_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(23779);
+            tokio::spawn(async move {
+                if let Err(err) = view_web::start(web_state, web_port).await {
+                    eprintln!("view-web server error: {err}");
+                }
+            });
+
             tokio::spawn(async move {
                 let _ = if use_demo {
                     listener::start_demo_listener(event_tx, agent_tx).await

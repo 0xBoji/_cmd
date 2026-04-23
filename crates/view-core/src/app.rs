@@ -94,6 +94,27 @@ pub struct TerminalState {
     pub pending_context_line: Option<String>,
 }
 
+/// Serializable projection of a terminal session for web clients.
+#[derive(Debug, Clone, Serialize)]
+pub struct TerminalSnapshot {
+    pub id: usize,
+    pub title: String,
+    pub cwd: String,
+    pub status: String,
+    /// Last N lines of output (newest at the end).
+    pub recent_lines: Vec<String>,
+}
+
+/// Full serializable snapshot of VIEW state — broadcast over WebSocket.
+#[derive(Debug, Clone, Serialize)]
+pub struct WebSnapshot {
+    pub agents: Vec<Agent>,
+    pub events: Vec<Event>,
+    pub terminals: Vec<TerminalSnapshot>,
+    pub total_events_received: u64,
+    pub timestamp: chrono::DateTime<chrono::Local>,
+}
+
 impl Default for TerminalState {
     fn default() -> Self {
         Self {
@@ -183,6 +204,38 @@ impl AppState {
             self.selected_terminal_idx = self.terminal_sessions.len() - 1;
         }
         true
+    }
+
+    /// Build a fully serializable snapshot of current state for web clients.
+    /// Terminal lines are capped at 50 most recent; events at 20 most recent.
+    pub fn web_snapshot(&self) -> WebSnapshot {
+        WebSnapshot {
+            agents: self.agents.values().cloned().collect(),
+            events: self.events.iter().take(20).cloned().collect(),
+            terminals: self
+                .terminal_sessions
+                .iter()
+                .enumerate()
+                .map(|(id, session)| {
+                    let len = session.lines.len();
+                    let recent_lines = session
+                        .lines
+                        .iter()
+                        .skip(len.saturating_sub(50))
+                        .cloned()
+                        .collect();
+                    TerminalSnapshot {
+                        id,
+                        title: session.title.clone(),
+                        cwd: session.cwd.clone(),
+                        status: session.status.clone(),
+                        recent_lines,
+                    }
+                })
+                .collect(),
+            total_events_received: self.total_events_received,
+            timestamp: chrono::Local::now(),
+        }
     }
 
     pub fn add_event(&mut self, event: Event) {
