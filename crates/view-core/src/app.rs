@@ -4,6 +4,10 @@ use std::collections::{BTreeMap, VecDeque};
 /// Maximum number of events to retain in the buffer.
 const EVENT_LIMIT: usize = 100;
 const TERMINAL_LINE_LIMIT: usize = 400;
+/// Default number of terminal sessions when using `AppState::new()`.
+const DEFAULT_TERMINAL_SESSION_COUNT: usize = 1;
+/// Hard cap on concurrent terminal sessions (prevents unbounded memory growth).
+pub const MAX_TERMINAL_SESSIONS: usize = 32;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
@@ -80,20 +84,25 @@ pub enum ViewMode {
     Focus,
 }
 
+#[derive(Clone)]
 pub struct TerminalState {
     pub title: String,
     pub cwd: String,
     pub status: String,
     pub lines: VecDeque<String>,
+    pub history: VecDeque<String>,
+    pub pending_context_line: Option<String>,
 }
 
 impl Default for TerminalState {
     fn default() -> Self {
         Self {
-            title: "local-shell".to_string(),
+            title: "shell-1".to_string(),
             cwd: String::new(),
             status: "starting".to_string(),
             lines: VecDeque::new(),
+            history: VecDeque::new(),
+            pending_context_line: None,
         }
     }
 }
@@ -108,7 +117,8 @@ pub struct AppState {
     pub search_query: String,
     pub search_mode: bool,
     pub view_mode: ViewMode,
-    pub terminal: TerminalState,
+    pub terminal_sessions: Vec<TerminalState>,
+    pub selected_terminal_idx: usize,
 }
 
 impl Default for AppState {
@@ -118,7 +128,15 @@ impl Default for AppState {
 }
 
 impl AppState {
+    /// Create a new `AppState` with a single terminal session (default).
     pub fn new() -> Self {
+        Self::new_with_sessions(DEFAULT_TERMINAL_SESSION_COUNT)
+    }
+
+    /// Create a new `AppState` with `count` terminal sessions pre-initialized.
+    /// `count` is clamped to `[1, MAX_TERMINAL_SESSIONS]`.
+    pub fn new_with_sessions(count: usize) -> Self {
+        let count = count.max(1).min(MAX_TERMINAL_SESSIONS);
         Self {
             agents: BTreeMap::new(),
             events: VecDeque::with_capacity(EVENT_LIMIT),
@@ -129,8 +147,42 @@ impl AppState {
             search_query: String::new(),
             search_mode: false,
             view_mode: ViewMode::Grid,
-            terminal: TerminalState::default(),
+            terminal_sessions: (0..count)
+                .map(|index| TerminalState {
+                    title: format!("shell-{}", index + 1),
+                    ..TerminalState::default()
+                })
+                .collect(),
+            selected_terminal_idx: 0,
         }
+    }
+
+    /// Append a new terminal session with the given title.
+    /// Returns the new session's index, or `None` if the cap is reached.
+    pub fn add_terminal_session(&mut self, title: impl Into<String>) -> Option<usize> {
+        if self.terminal_sessions.len() >= MAX_TERMINAL_SESSIONS {
+            return None;
+        }
+        let index = self.terminal_sessions.len();
+        self.terminal_sessions.push(TerminalState {
+            title: title.into(),
+            ..TerminalState::default()
+        });
+        Some(index)
+    }
+
+    /// Remove the terminal session at `index`, selecting the nearest remaining
+    /// session afterwards. Returns `false` if the index is out of range or
+    /// it is the last session (minimum 1 must always exist).
+    pub fn remove_terminal_session(&mut self, index: usize) -> bool {
+        if self.terminal_sessions.len() <= 1 || index >= self.terminal_sessions.len() {
+            return false;
+        }
+        self.terminal_sessions.remove(index);
+        if self.selected_terminal_idx >= self.terminal_sessions.len() {
+            self.selected_terminal_idx = self.terminal_sessions.len() - 1;
+        }
+        true
     }
 
     pub fn add_event(&mut self, event: Event) {
@@ -259,29 +311,113 @@ impl AppState {
         self.clamp_selection();
     }
 
-    pub fn append_terminal_line(&mut self, line: impl Into<String>) {
-        if self.terminal.lines.len() >= TERMINAL_LINE_LIMIT {
-            self.terminal.lines.pop_front();
+    pub fn append_terminal_line(&mut self, session_id: usize, line: impl Into<String>) {
+        let Some(session) = self.terminal_sessions.get_mut(session_id) else {
+            return;
+        };
+        if session.lines.len() >= TERMINAL_LINE_LIMIT {
+            session.lines.pop_front();
         }
-        self.terminal.lines.push_back(line.into());
+        session.lines.push_back(line.into());
     }
 
-    pub fn set_terminal_status(&mut self, status: impl Into<String>) {
-        self.terminal.status = status.into();
+    pub fn clear_terminal_lines(&mut self, session_id: usize) {
+        if let Some(session) = self.terminal_sessions.get_mut(session_id) {
+            session.lines.clear();
+            session.pending_context_line = None;
+        }
     }
 
-    pub fn set_terminal_cwd(&mut self, cwd: impl Into<String>) {
-        self.terminal.cwd = cwd.into();
+    pub fn append_terminal_context_line(&mut self, session_id: usize, line: String) {
+        self.append_terminal_line(session_id, line.clone());
+        if let Some(session) = self.terminal_sessions.get_mut(session_id) {
+            session.pending_context_line = Some(line);
+        }
     }
 
-    pub fn recent_terminal_lines(&self, limit: usize) -> Vec<&str> {
-        let len = self.terminal.lines.len();
-        self.terminal
+    pub fn finalize_terminal_context_line(&mut self, session_id: usize, seconds: f64) {
+        let Some(session) = self.terminal_sessions.get_mut(session_id) else {
+            return;
+        };
+        let Some(pending_line) = session.pending_context_line.take() else {
+            return;
+        };
+
+        if let Some(line) = session
+            .lines
+            .iter_mut()
+            .rev()
+            .find(|line| **line == pending_line)
+        {
+            *line = format!("{pending_line} ({seconds:.4}s)");
+        }
+    }
+
+    pub fn set_terminal_status(&mut self, session_id: usize, status: impl Into<String>) {
+        if let Some(session) = self.terminal_sessions.get_mut(session_id) {
+            session.status = status.into();
+        }
+    }
+
+    pub fn set_terminal_cwd(&mut self, session_id: usize, cwd: impl Into<String>) {
+        if let Some(session) = self.terminal_sessions.get_mut(session_id) {
+            session.cwd = cwd.into();
+        }
+    }
+
+    pub fn recent_terminal_lines(&self, session_id: usize, limit: usize) -> Vec<&str> {
+        let Some(session) = self.terminal_sessions.get(session_id) else {
+            return Vec::new();
+        };
+        let len = session.lines.len();
+        session
             .lines
             .iter()
             .skip(len.saturating_sub(limit))
             .map(String::as_str)
             .collect()
+    }
+
+    pub fn append_terminal_history(&mut self, session_id: usize, command: String) {
+        let Some(session) = self.terminal_sessions.get_mut(session_id) else {
+            return;
+        };
+        // Remove if exists to move to back (most recent)
+        session.history.retain(|c| c != &command);
+        if session.history.len() >= 50 {
+            session.history.pop_front();
+        }
+        session.history.push_back(command);
+    }
+
+    pub fn get_terminal_suggestion(&self, session_id: usize, input: &str) -> Option<String> {
+        if input.is_empty() {
+            return None;
+        }
+        let session = self.terminal_sessions.get(session_id)?;
+        session
+            .history
+            .iter()
+            .rev()
+            .find(|cmd| cmd.starts_with(input))
+            .cloned()
+    }
+
+    pub fn terminal_sessions(&self) -> &[TerminalState] {
+        &self.terminal_sessions
+    }
+
+    pub fn selected_terminal(&self) -> Option<&TerminalState> {
+        self.terminal_sessions.get(self.selected_terminal_idx)
+    }
+
+    pub fn select_terminal_index(&mut self, index: usize) {
+        if self.terminal_sessions.is_empty() {
+            self.selected_terminal_idx = 0;
+        } else {
+            self.selected_terminal_idx = index.min(self.terminal_sessions.len() - 1);
+            self.view_mode = ViewMode::Focus;
+        }
     }
 
     pub fn select_visible_index(&mut self, index: usize) {
@@ -576,16 +712,52 @@ mod tests {
     #[test]
     fn terminal_state_should_keep_recent_lines_only() {
         let mut app = AppState::new();
-        app.set_terminal_status("ready");
-        app.set_terminal_cwd("/tmp/view-shell");
+        app.set_terminal_status(0, "ready");
+        app.set_terminal_cwd(0, "/tmp/view-shell");
         for index in 0..405 {
-            app.append_terminal_line(format!("line-{index}"));
+            app.append_terminal_line(0, format!("line-{index}"));
         }
 
-        assert_eq!(app.terminal.status, "ready");
-        assert_eq!(app.terminal.cwd, "/tmp/view-shell");
-        assert_eq!(app.terminal.lines.len(), 400);
-        assert_eq!(app.recent_terminal_lines(2), vec!["line-403", "line-404"]);
+        assert_eq!(app.terminal_sessions[0].status, "ready");
+        assert_eq!(app.terminal_sessions[0].cwd, "/tmp/view-shell");
+        assert_eq!(app.terminal_sessions[0].lines.len(), 400);
+        assert_eq!(
+            app.recent_terminal_lines(0, 2),
+            vec!["line-403", "line-404"]
+        );
+    }
+
+    #[test]
+    fn clear_terminal_lines_should_drop_existing_transcript() {
+        let mut app = AppState::new();
+        app.append_terminal_line(0, "$ ls");
+        app.append_terminal_line(0, "Cargo.toml");
+
+        app.clear_terminal_lines(0);
+
+        assert!(app.recent_terminal_lines(0, 10).is_empty());
+    }
+
+    #[test]
+    fn finalize_terminal_context_line_should_update_pending_context_with_timing() {
+        let mut app = AppState::new();
+        app.append_terminal_context_line(0, "/tmp/project git:(main)".to_string());
+        app.append_terminal_line(0, "$ ls");
+
+        app.finalize_terminal_context_line(0, 0.042);
+
+        assert_eq!(
+            app.recent_terminal_lines(0, 2),
+            vec!["/tmp/project git:(main) (0.0420s)", "$ ls"]
+        );
+    }
+
+    #[test]
+    fn select_terminal_index_should_clamp_and_switch_focus_mode() {
+        let mut app = AppState::new();
+        app.select_terminal_index(99);
+        assert_eq!(app.selected_terminal_idx, 0);
+        assert_eq!(app.view_mode, ViewMode::Focus);
     }
 
     #[test]

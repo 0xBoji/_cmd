@@ -1,7 +1,4 @@
-use eframe::egui::{
-    self, Align, Color32, Event, Frame, Key, Layout, RichText, ScrollArea, Stroke, Vec2,
-    ViewportCommand,
-};
+use eframe::egui::{self, Align, Color32, Event, Frame, Key, Layout, RichText, ScrollArea, Stroke, ViewportCommand};
 use image::{ImageBuffer, Rgba};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -12,31 +9,39 @@ use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
 use view_core::{
-    app::{Agent, AppState, ViewMode},
+    app::AppState,
     listener,
     terminal::{self, TerminalEvent},
 };
 
+use crate::{
+    shell,
+    shortcuts,
+    transcript::{
+        command_block_has_error, is_command_context_line, is_context_block_start,
+        is_error_output_line, is_legacy_context_block_start, should_extend_error_block_to_bottom,
+        should_render_block_separator,
+    },
+};
+
 const BG_APP: Color32 = Color32::from_rgb(10, 11, 14);
-const BG_CHROME: Color32 = Color32::from_rgb(32, 32, 35);
 const BG_PANEL: Color32 = Color32::from_rgb(7, 8, 12);
 const BG_PANEL_ALT: Color32 = Color32::from_rgb(17, 19, 26);
 const FG_PRIMARY: Color32 = Color32::from_rgb(234, 238, 255);
 const FG_MUTED: Color32 = Color32::from_rgb(145, 154, 188);
 const ACCENT: Color32 = Color32::from_rgb(108, 92, 231);
 const ACCENT_ALT: Color32 = Color32::from_rgb(76, 201, 240);
-const ACCENT_ALT_2: Color32 = Color32::from_rgb(255, 122, 198);
-const SPLIT_LINE: Color32 = Color32::from_rgb(145, 255, 120);
-const SUCCESS: Color32 = Color32::from_rgb(109, 234, 170);
-const WARNING: Color32 = Color32::from_rgb(255, 184, 76);
-const OFFLINE: Color32 = Color32::from_rgb(122, 128, 158);
-const DANGER: Color32 = Color32::from_rgb(255, 96, 96);
+const PICKER_HOVER: Color32 = Color32::from_rgb(46, 167, 208);
+const ERROR_PANEL_BG: Color32 = Color32::from_rgb(96, 40, 40);
+const ERROR_TEXT: Color32 = Color32::from_rgb(255, 228, 228);
 
 pub struct ViewDesktopApp {
     state: Arc<Mutex<AppState>>,
-    search_buffer: String,
     shell_input: String,
-    shell_tx: terminal::TerminalCommandTx,
+    history_offset: usize,
+    directory_picker_open: bool,
+    directory_picker_query: String,
+    shell_txs: Vec<terminal::TerminalCommandTx>,
     frame_count: u64,
     screenshot_requested: bool,
     screenshot_target: Option<PathBuf>,
@@ -48,18 +53,59 @@ impl ViewDesktopApp {
         configure_theme(&cc.egui_ctx);
 
         let state = Arc::new(Mutex::new(AppState::new()));
-        let shell_tx = spawn_core_runtime(state.clone());
+        let shell_txs = spawn_core_runtime(state.clone());
 
         Self {
             state,
-            search_buffer: String::new(),
             shell_input: String::new(),
-            shell_tx,
+            history_offset: 0,
+            directory_picker_open: false,
+            directory_picker_query: String::new(),
+            shell_txs,
             frame_count: 0,
             screenshot_requested: false,
             screenshot_target: screenshot_target(),
         }
     }
+}
+
+// suggestion helper — delegated to shell module
+#[inline]
+fn terminal_suggestion_suffix(input: &str, suggestion: Option<&str>) -> Option<String> {
+    shell::terminal_suggestion_suffix(input, suggestion)
+}
+
+// shell_quote_path — delegated to shell module
+#[inline]
+fn shell_quote_path(path: &str) -> String {
+    shell::shell_quote_path(path)
+}
+
+fn directory_picker_options(cwd: &str, query: &str) -> Vec<shell::DirectoryOption> {
+    shell::directory_picker_options(cwd, query)
+}
+
+fn submit_shell_command(
+    state: &mut AppState,
+    shell_txs: &[terminal::TerminalCommandTx],
+    history_offset: &mut usize,
+    command: String,
+) -> bool {
+    shell::submit_shell_command(state, shell_txs, history_offset, command)
+}
+
+fn history_entry_for_offset(
+    history: &std::collections::VecDeque<String>,
+    history_offset: usize,
+) -> Option<String> {
+    shell::history_entry_for_offset(history, history_offset)
+}
+
+fn draw_divider(ui: &mut egui::Ui, color: Color32) {
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .hline(rect.x_range(), rect.center().y, Stroke::new(1.0, color));
 }
 
 impl eframe::App for ViewDesktopApp {
@@ -69,52 +115,25 @@ impl eframe::App for ViewDesktopApp {
         debug_log(format!("frame={} entering update", self.frame_count));
 
         let mut state = self.state.blocking_lock();
-        let search_buffer = &mut self.search_buffer;
-        handle_shortcuts(ctx, &mut state, search_buffer);
-
-        egui::TopBottomPanel::top("header")
-            .frame(
-                Frame::new()
-                    .fill(BG_CHROME)
-                    .stroke(Stroke::new(1.0, SPLIT_LINE)),
-            )
-            .show(ctx, |ui| render_header(ui, &mut state, search_buffer));
-
-        egui::TopBottomPanel::bottom("footer")
-            .frame(Frame::new().fill(BG_CHROME))
-            .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    command_badge(ui, "tab", "focus");
-                    command_badge(ui, "f", "filter");
-                    command_badge(ui, "/", "search");
-                    command_badge(ui, "j/k", "move");
-                    command_badge(ui, "pgup", "prev");
-                    command_badge(ui, "pgdn", "next");
-                    ui.separator();
-                    ui.label(
-                        RichText::new(format!(
-                            "mode:{} • filter:{} • visible:{}",
-                            match state.view_mode {
-                                ViewMode::Grid => "grid",
-                                ViewMode::Focus => "focus",
-                            },
-                            state.filter_label(),
-                            state.visible_agent_count()
-                        ))
-                        .monospace()
-                        .color(FG_MUTED),
-                    );
-                });
-            });
+        shortcuts::handle(ctx, &mut state);
 
         egui::CentralPanel::default()
             .frame(Frame::new().fill(BG_APP))
-            .show(ctx, |ui| match state.view_mode {
-                ViewMode::Grid => render_grid(ui, &mut state),
-                ViewMode::Focus => {
-                    render_focus(ui, &mut state, &mut self.shell_input, &self.shell_tx)
-                }
+            .show(ctx, |ui| {
+                render_focus(
+                    ui,
+                    &mut state,
+                    &mut self.shell_input,
+                    &mut self.history_offset,
+                    &mut self.directory_picker_open,
+                    &mut self.directory_picker_query,
+                    &self.shell_txs,
+                )
             });
+
+        // Force disable IME to prevent macOS Vietnamese Telex from intercepting
+        // terminal inputs, showing blue composing highlights, and eating spaces.
+        ctx.output_mut(|o| o.ime = None);
 
         drop(state);
         self.maybe_capture_screenshot(ctx);
@@ -162,203 +181,32 @@ impl ViewDesktopApp {
     }
 }
 
-fn render_header(ui: &mut egui::Ui, state: &mut AppState, search_buffer: &mut String) {
-    let page_size = grid_agent_page_size(ui.available_width());
-    let tabs = state.visible_agents_page(page_size);
-    let selected = state.get_selected_agent_id();
-    let current_page = state.current_grid_page(page_size) + 1;
-    let total_pages = state.grid_page_count(page_size);
-
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(4.0);
-        traffic_lights(ui);
-        ui.add_space(8.0);
-        chip(ui, "VIEW", ACCENT, true);
-        ui.label(
-            RichText::new(format!("{} active", state.visible_agent_count()))
-                .monospace()
-                .color(FG_MUTED),
-        );
-        ui.label(
-            RichText::new(format!("page {current_page}/{total_pages}"))
-                .monospace()
-                .color(FG_MUTED),
-        );
-
-        for (index, agent_id) in tabs.iter().enumerate() {
-            let is_selected = selected.as_deref() == Some(agent_id.as_str());
-            if tab_chip(ui, agent_id, is_selected).clicked() {
-                let base = state.current_grid_page(page_size) * page_size;
-                state.select_visible_index(base + index);
-            }
-        }
-
-        if chrome_button(ui, "+").clicked() {
-            state.select_first();
-        }
-
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let search = ui.add_sized(
-                [180.0, 24.0],
-                egui::TextEdit::singleline(search_buffer)
-                    .id_source("desktop_search")
-                    .hint_text("search sessions"),
-            );
-            if state.search_mode && !search.has_focus() {
-                search.request_focus();
-            }
-            if search.changed() {
-                state.set_search_query(search_buffer);
-            }
-            if search.lost_focus() && state.search_mode {
-                state.end_search();
-            }
-
-            if chrome_button(ui, "focus").clicked() {
-                state.view_mode = ViewMode::Focus;
-            }
-            if chrome_button(ui, "grid").clicked() {
-                state.view_mode = ViewMode::Grid;
-            }
-            if chrome_button(ui, "next").clicked() {
-                state.select_next_page();
-            }
-            if chrome_button(ui, "prev").clicked() {
-                state.select_previous_page();
-            }
-            if chrome_button(ui, "filter").clicked() {
-                state.cycle_filter_mode();
-            }
-
-            chip(
-                ui,
-                &format!("filter:{}", state.filter_label()),
-                Color32::from_gray(90),
-                false,
-            );
-        });
-    });
-}
-
-fn render_grid(ui: &mut egui::Ui, state: &mut AppState) {
-    let columns = grid_columns_for_width(ui.available_width());
-    let rows = grid_rows();
-    let page_size = grid_agent_page_size(ui.available_width());
-    let ids = state.visible_agents_page(page_size);
-    let selected = state.get_selected_agent_id();
-    let spacing = 10.0;
-    let total_spacing = spacing * (columns.saturating_sub(1) as f32);
-    let tile_width = ((ui.available_width() - total_spacing).max(240.0)) / columns as f32;
-    let tile_size = Vec2::new(tile_width.max(250.0), 222.0);
-
-    ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for row in 0..rows {
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = spacing;
-
-                    for col in 0..columns {
-                        let index = row * columns + col;
-                        ui.allocate_ui_with_layout(
-                            tile_size,
-                            Layout::top_down(Align::LEFT),
-                            |ui| {
-                                if index == 0 {
-                                    render_shell_tile(ui, state, tile_size);
-                                } else if let Some(id) = ids.get(index - 1) {
-                                    if let Some(agent) = state.agents.get(id).cloned() {
-                                        let is_selected = selected.as_deref() == Some(id.as_str());
-                                        render_tile(
-                                            ui,
-                                            &agent,
-                                            state,
-                                            is_selected,
-                                            index,
-                                            tile_size,
-                                        );
-                                    } else {
-                                        ui.allocate_space(tile_size);
-                                    }
-                                } else {
-                                    ui.allocate_space(tile_size);
-                                }
-                            },
-                        );
-                    }
-                });
-                ui.add_space(spacing);
-            }
-        });
-}
-
 fn render_focus(
     ui: &mut egui::Ui,
     state: &mut AppState,
     shell_input: &mut String,
-    shell_tx: &terminal::TerminalCommandTx,
+    history_offset: &mut usize,
+    directory_picker_open: &mut bool,
+    directory_picker_query: &mut String,
+    shell_txs: &[terminal::TerminalCommandTx],
 ) {
-    ui.columns(2, |columns| {
-        columns[0].heading("Sessions");
-        for (index, id) in state.visible_agent_ids().iter().enumerate() {
-            let selected = state.get_selected_agent_id().as_deref() == Some(id.as_str());
-            if columns[0]
-                .selectable_label(selected, id)
-                .on_hover_text("Select session")
-                .clicked()
-            {
-                state.select_visible_index(index);
-            }
-        }
-
-        columns[1].heading("Detail");
-        if let Some(agent) = state.get_selected_agent().cloned() {
-            render_focus_detail(&mut columns[1], &agent, state);
-            columns[1].add_space(12.0);
-            render_shell_pane(&mut columns[1], state, shell_input, shell_tx);
-        } else {
-            columns[1].label("No session selected.");
-            columns[1].add_space(12.0);
-            render_shell_pane(&mut columns[1], state, shell_input, shell_tx);
-        }
-    });
-}
-
-fn handle_shortcuts(ctx: &egui::Context, state: &mut AppState, search_buffer: &mut String) {
-    if ctx.input(|input| input.key_pressed(Key::Tab)) {
-        state.toggle_view_mode();
-    }
-
-    if ctx.input(|input| input.key_pressed(Key::ArrowDown) || input.key_pressed(Key::J)) {
-        state.select_next();
-    }
-
-    if ctx.input(|input| input.key_pressed(Key::ArrowUp) || input.key_pressed(Key::K)) {
-        state.select_previous();
-    }
-
-    if ctx.input(|input| input.key_pressed(Key::PageDown)) {
-        state.select_next_page();
-    }
-
-    if ctx.input(|input| input.key_pressed(Key::PageUp)) {
-        state.select_previous_page();
-    }
-
-    if ctx.input(|input| input.key_pressed(Key::F)) {
-        state.cycle_filter_mode();
-    }
-
-    if ctx.input(|input| input.key_pressed(Key::Slash)) {
-        state.begin_search();
-    }
-
-    if ctx.input(|input| input.key_pressed(Key::Escape)) {
-        state.clear_search_query();
-        search_buffer.clear();
-        state.end_search();
+    if let Some(session) = state.selected_terminal().cloned() {
+        render_focus_terminal(
+            ui,
+            &session,
+            state,
+            shell_input,
+            history_offset,
+            directory_picker_open,
+            directory_picker_query,
+            shell_txs,
+        );
+    } else {
+        ui.label("No session selected.");
     }
 }
+
+// handle_shortcuts moved to shortcuts.rs
 
 fn configure_theme(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::dark();
@@ -375,350 +223,7 @@ fn configure_theme(ctx: &egui::Context) {
     ctx.set_visuals(visuals);
 }
 
-fn chip(ui: &mut egui::Ui, label: &str, color: Color32, filled: bool) {
-    let text = RichText::new(label)
-        .strong()
-        .color(if filled { BG_APP } else { color });
-    let frame = Frame::new()
-        .fill(if filled { color } else { BG_PANEL_ALT })
-        .stroke(Stroke::new(1.0, color))
-        .corner_radius(10.0)
-        .inner_margin(egui::Margin::symmetric(8, 4));
-    frame.show(ui, |ui| {
-        ui.label(text);
-    });
-}
-
-fn tab_chip(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
-    let text = RichText::new(label).strong().color(FG_PRIMARY);
-    egui::Frame::new()
-        .fill(if selected { BG_PANEL_ALT } else { BG_CHROME })
-        .stroke(Stroke::new(
-            1.0,
-            if selected {
-                ACCENT_ALT
-            } else {
-                Color32::from_gray(60)
-            },
-        ))
-        .corner_radius(12.0)
-        .inner_margin(egui::Margin::symmetric(10, 6))
-        .show(ui, |ui| ui.button(text))
-        .inner
-}
-
-fn chrome_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(RichText::new(label).monospace().color(FG_PRIMARY))
-            .fill(BG_PANEL)
-            .stroke(Stroke::new(1.0, Color32::from_gray(80)))
-            .corner_radius(8.0)
-            .min_size(Vec2::new(34.0, 24.0)),
-    )
-}
-
-fn traffic_lights(ui: &mut egui::Ui) {
-    for color in [
-        Color32::from_rgb(255, 95, 87),
-        Color32::from_rgb(255, 189, 46),
-        Color32::from_rgb(40, 202, 64),
-    ] {
-        ui.label(RichText::new("●").color(color));
-    }
-}
-
-fn render_tile(
-    ui: &mut egui::Ui,
-    agent: &Agent,
-    state: &mut AppState,
-    selected: bool,
-    visible_index: usize,
-    tile_size: Vec2,
-) {
-    let border = if selected { ACCENT_ALT } else { ACCENT };
-    let fill = if selected { BG_PANEL } else { BG_PANEL_ALT };
-    let events = state.get_recent_events(Some(&agent.id), 4);
-    let status = status_color(agent);
-    let messages = agent
-        .metadata
-        .get("messages")
-        .cloned()
-        .unwrap_or_else(|| "-".to_string());
-    let last_tool = agent
-        .metadata
-        .get("last_tool")
-        .cloned()
-        .unwrap_or_else(|| "idle".to_string());
-
-    let summary = agent
-        .metadata
-        .get("cwd")
-        .map_or_else(|| "-".to_string(), |cwd| truncate_path(cwd, 20));
-    let response = Frame::new()
-        .fill(fill)
-        .stroke(Stroke::new(if selected { 2.0 } else { 1.0 }, border))
-        .corner_radius(12.0)
-        .inner_margin(egui::Margin::same(10))
-        .show(ui, |ui| {
-            ui.set_min_size(tile_size);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("◉").color(status).size(14.0));
-                ui.label(RichText::new(&agent.id).strong().size(16.0));
-                ui.add_space(4.0);
-                ui.label(
-                    RichText::new(format!("{} lines", events.len()))
-                        .monospace()
-                        .color(FG_MUTED),
-                );
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    chip(
-                        ui,
-                        &agent.status.to_uppercase(),
-                        if selected { ACCENT_ALT } else { status },
-                        false,
-                    );
-                });
-            });
-            ui.label(
-                RichText::new(format!(
-                    "{}/{} • {} • {}",
-                    agent.project, agent.role, last_tool, agent.branch
-                ))
-                .monospace()
-                .color(FG_MUTED),
-            );
-            ui.separator();
-            ui.label(
-                RichText::new(format!("activity {}", trendline(agent, 32)))
-                    .monospace()
-                    .color(status),
-            );
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!("tokens {}", agent.tokens))
-                        .monospace()
-                        .color(FG_PRIMARY),
-                );
-                ui.separator();
-                ui.label(
-                    RichText::new(format!("msgs {}", messages))
-                        .monospace()
-                        .color(FG_MUTED),
-                );
-                ui.separator();
-                ui.label(RichText::new(summary.clone()).monospace().color(FG_MUTED));
-            });
-            ui.separator();
-
-            for event in &events {
-                ui.label(
-                    RichText::new(format!(
-                        "$ {} {}\n{}",
-                        event.component.to_lowercase(),
-                        trim_line(&event.payload, 30),
-                        trim_line(&format_output_line(event), 46)
-                    ))
-                    .monospace()
-                    .color(level_color(&event.level)),
-                );
-            }
-
-            if events.is_empty() {
-                ui.label(
-                    RichText::new("$ idle\n…waiting for recent transcript")
-                        .monospace()
-                        .color(FG_MUTED),
-                );
-            }
-
-            ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
-                ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("click").monospace().color(ACCENT_ALT_2));
-                    ui.label(RichText::new("select").monospace().color(FG_MUTED));
-                    ui.separator();
-                    ui.label(RichText::new("focus").monospace().color(ACCENT_ALT_2));
-                    ui.label(RichText::new("inspect").monospace().color(FG_MUTED));
-                });
-            });
-        })
-        .response;
-
-    if response.clicked() {
-        state.select_visible_index(visible_index);
-    }
-}
-
-fn render_focus_detail(ui: &mut egui::Ui, agent: &Agent, state: &AppState) {
-    Frame::new()
-        .fill(BG_PANEL_ALT)
-        .stroke(Stroke::new(1.0, SPLIT_LINE))
-        .corner_radius(12.0)
-        .inner_margin(egui::Margin::same(14))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&agent.id).strong().size(20.0));
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    chip(ui, &agent.status.to_uppercase(), status_color(agent), false);
-                });
-            });
-            ui.label(
-                RichText::new(format!(
-                    "{} · {} · {}",
-                    agent.project, agent.role, agent.branch
-                ))
-                .monospace()
-                .color(FG_MUTED),
-            );
-            ui.separator();
-            ui.monospace(format!("branch    {}", agent.branch));
-            ui.monospace(format!("tokens    {}", agent.tokens));
-            ui.monospace(format!(
-                "cwd       {}",
-                agent.metadata.get("cwd").cloned().unwrap_or_default()
-            ));
-            ui.monospace(format!(
-                "model     {}",
-                agent.metadata.get("model").cloned().unwrap_or_default()
-            ));
-            ui.separator();
-
-            for event in state.get_recent_events(Some(&agent.id), 8) {
-                ui.label(
-                    RichText::new(format!(
-                        "$ {} {}\n{}",
-                        event.component.to_lowercase(),
-                        trim_line(&event.payload, 42),
-                        trim_line(&format_output_line(event), 86)
-                    ))
-                    .monospace()
-                    .color(level_color(&event.level)),
-                );
-            }
-        });
-}
-
-fn render_shell_tile(ui: &mut egui::Ui, state: &AppState, tile_size: Vec2) {
-    let lines = state.recent_terminal_lines(8);
-
-    Frame::new()
-        .fill(BG_PANEL)
-        .stroke(Stroke::new(2.0, SPLIT_LINE))
-        .corner_radius(12.0)
-        .inner_margin(egui::Margin::same(10))
-        .show(ui, |ui| {
-            ui.set_min_size(tile_size);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("◉").color(SUCCESS).size(14.0));
-                ui.label(RichText::new(&state.terminal.title).strong().size(16.0));
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    chip(ui, &state.terminal.status.to_uppercase(), SPLIT_LINE, false);
-                });
-            });
-            ui.label(
-                RichText::new(truncate_path(&state.terminal.cwd, 42))
-                    .monospace()
-                    .color(FG_MUTED),
-            );
-            ui.separator();
-
-            if lines.is_empty() {
-                ui.label(
-                    RichText::new("$ zsh\n…waiting for shell output")
-                        .monospace()
-                        .color(FG_MUTED),
-                );
-            } else {
-                for line in lines {
-                    ui.label(RichText::new(line).monospace().color(FG_PRIMARY));
-                }
-            }
-
-            ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
-                ui.separator();
-                ui.label(
-                    RichText::new("$ local shell attached")
-                        .monospace()
-                        .color(SPLIT_LINE),
-                );
-            });
-        });
-}
-
-fn render_shell_pane(
-    ui: &mut egui::Ui,
-    state: &AppState,
-    shell_input: &mut String,
-    shell_tx: &terminal::TerminalCommandTx,
-) {
-    Frame::new()
-        .fill(BG_PANEL)
-        .stroke(Stroke::new(1.0, SPLIT_LINE))
-        .corner_radius(12.0)
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("local-shell").strong().size(18.0));
-                ui.label(
-                    RichText::new(format!(
-                        "{} • {}",
-                        state.terminal.status, state.terminal.cwd
-                    ))
-                    .monospace()
-                    .color(FG_MUTED),
-                );
-            });
-            ui.separator();
-
-            ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                for line in state.recent_terminal_lines(14) {
-                    ui.label(RichText::new(line).monospace().color(FG_PRIMARY));
-                }
-            });
-
-            ui.separator();
-            let response = ui.add_sized(
-                [ui.available_width(), 28.0],
-                egui::TextEdit::singleline(shell_input)
-                    .hint_text("run shell command and press Enter"),
-            );
-            if response.lost_focus()
-                && ui.input(|input| input.key_pressed(Key::Enter))
-                && !shell_input.trim().is_empty()
-            {
-                let command = shell_input.trim().to_string();
-                let _ = shell_tx.send(command);
-                shell_input.clear();
-            }
-        });
-}
-
-fn status_color(agent: &Agent) -> Color32 {
-    match agent.status.to_ascii_lowercase().as_str() {
-        "busy" => WARNING,
-        "offline" => OFFLINE,
-        _ => SUCCESS,
-    }
-}
-
-fn level_color(level: &str) -> Color32 {
-    match level.to_ascii_lowercase().as_str() {
-        "error" => DANGER,
-        "warn" => Color32::YELLOW,
-        "success" => SUCCESS,
-        _ => ACCENT_ALT,
-    }
-}
-
-fn format_output_line(event: &view_core::app::Event) -> String {
-    match event.level.as_str() {
-        "error" => format!("error: {}", event.payload),
-        "warn" => format!("warn: {}", event.payload),
-        "success" => format!("ok: {}", event.payload),
-        _ => format!("out: {}", event.payload),
-    }
-}
-
+#[cfg(test)]
 fn trim_line(value: &str, max_chars: usize) -> String {
     let chars = value.chars().collect::<Vec<_>>();
     if chars.len() <= max_chars {
@@ -731,75 +236,426 @@ fn trim_line(value: &str, max_chars: usize) -> String {
         + "…"
 }
 
-fn truncate_path(value: &str, max_chars: usize) -> String {
-    if value.chars().count() <= max_chars {
-        return value.to_string();
+fn truncate_path(value: &str, _max_chars: usize) -> String {
+    let parts: Vec<&str> = value.split('/').filter(|s| !s.is_empty()).collect();
+
+    if parts.is_empty() {
+        return "/".to_string();
     }
 
-    let suffix = value
-        .chars()
-        .rev()
-        .take(max_chars.saturating_sub(1))
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect::<String>();
-    format!("…{suffix}")
-}
-
-fn trendline(agent: &Agent, width: usize) -> String {
-    let values = agent.activity.iter().copied().collect::<Vec<_>>();
-    let start = values.len().saturating_sub(width);
-    let slice = &values[start..];
-    let max = slice.iter().copied().max().unwrap_or(0);
-    let blocks = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-
-    slice
-        .iter()
-        .map(|value| {
-            if max == 0 {
-                '·'
-            } else {
-                let index = ((*value * (blocks.len() as u64 - 1)) / max) as usize;
-                blocks[index]
-            }
-        })
-        .collect()
-}
-
-fn grid_columns_for_width(width: f32) -> usize {
-    if width > 1180.0 {
-        3
-    } else if width > 760.0 {
-        2
-    } else {
-        1
+    if parts.len() == 1 {
+        return format!("/{}", parts[0]);
     }
+
+    format!("…/{}", parts.last().unwrap())
 }
 
-fn grid_rows() -> usize {
-    2
-}
+fn render_focus_terminal(
+    ui: &mut egui::Ui,
+    session: &view_core::app::TerminalState,
+    state: &mut AppState,
+    shell_input: &mut String,
+    history_offset: &mut usize,
+    directory_picker_open: &mut bool,
+    directory_picker_query: &mut String,
+    shell_txs: &[terminal::TerminalCommandTx],
+) {
+    ui.add_space(14.0);
+    ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
 
-fn grid_page_size(width: f32) -> usize {
-    grid_columns_for_width(width) * grid_rows()
-}
-
-fn grid_agent_page_size(width: f32) -> usize {
-    grid_page_size(width).saturating_sub(1).max(1)
-}
-
-fn command_badge(ui: &mut egui::Ui, key: &str, label: &str) {
-    ui.group(|ui| {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(key).monospace().strong().color(FG_PRIMARY));
-            ui.label(RichText::new(label).color(FG_MUTED));
+            ui.add_space(14.0);
+            ui.label(
+                RichText::new(truncate_path(&session.cwd, 72))
+                    .monospace()
+                    .color(FG_MUTED),
+            );
         });
+
+        ui.add_space(10.0);
+        ui.separator();
+
+        let transcript_height = (ui.available_height() - 110.0).max(180.0);
+        let lines = state.recent_terminal_lines(state.selected_terminal_idx, 64);
+        let transcript_ends_with_error = lines
+            .iter()
+            .rposition(|line| line.starts_with("$ "))
+            .is_some_and(|index| command_block_has_error(&lines, index));
+        ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(transcript_height)
+            .stick_to_bottom(true)
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+
+                let num_lines = lines.len() as f32;
+                let num_prompts = lines.iter().filter(|l| l.starts_with("$ ")).count() as f32;
+                let estimated_height = (num_lines * 14.5) + (num_prompts * 18.0) + 10.0;
+                let remaining_space = ui.available_height() - estimated_height;
+                if remaining_space > 0.0 {
+                    ui.add_space(remaining_space);
+                }
+
+                let mut index = 0usize;
+                let mut previous_block_had_error = false;
+                while index < lines.len() {
+                    let line = lines[index];
+                    let has_context_line = is_context_block_start(&lines, index);
+                    if has_context_line || line.starts_with("$ ") {
+                        let block_start = index;
+                        let prompt_index = if has_context_line { index + 1 } else { index };
+                        let mut block_end = prompt_index + 1;
+                        while block_end < lines.len()
+                            && !lines[block_end].starts_with("$ ")
+                            && !is_context_block_start(&lines, block_end)
+                            && !is_legacy_context_block_start(&lines, block_end)
+                        {
+                            block_end += 1;
+                        }
+
+                        let has_error = command_block_has_error(&lines, prompt_index);
+                        if should_render_block_separator(previous_block_had_error, has_error) {
+                            ui.add_space(8.0);
+                            ui.separator();
+                            ui.add_space(8.0);
+                        }
+
+                        let block_width = ui.available_width();
+                        let extend_error_block_to_bottom = should_extend_error_block_to_bottom(
+                            has_error,
+                            block_end == lines.len(),
+                        );
+                        let block_height = if extend_error_block_to_bottom {
+                            ui.available_height()
+                        } else {
+                            0.0
+                        };
+                        Frame::new()
+                            .fill(if has_error {
+                                ERROR_PANEL_BG
+                            } else {
+                                Color32::TRANSPARENT
+                            })
+                            .corner_radius(if has_error { 0.0 } else { 8.0 })
+                            .inner_margin(egui::Margin::symmetric(
+                                10,
+                                if has_error { 16 } else { 8 },
+                            ))
+                            .show(ui, |ui| {
+                                ui.set_min_width((block_width - 20.0).max(0.0));
+                                if extend_error_block_to_bottom {
+                                    ui.set_min_height(block_height);
+                                }
+                                for block_line in &lines[block_start..block_end] {
+                                    let mut color = FG_PRIMARY;
+                                    let mut is_bold = false;
+
+                                    if is_command_context_line(block_line) {
+                                        color = FG_MUTED;
+                                    } else if block_line.starts_with("$ ") {
+                                        color = if has_error {
+                                            ERROR_TEXT
+                                        } else {
+                                            Color32::WHITE
+                                        };
+                                        is_bold = true;
+                                    } else if block_line.starts_with("~ (") {
+                                        color = FG_MUTED;
+                                    } else if is_error_output_line(block_line) {
+                                        color = ERROR_TEXT;
+                                    }
+
+                                    ui.label(if is_bold {
+                                        RichText::new(*block_line).monospace().color(color).strong()
+                                    } else {
+                                        RichText::new(*block_line).monospace().color(color)
+                                    });
+                                }
+                            });
+
+                        previous_block_had_error = has_error;
+                        index = block_end;
+                        while index < lines.len() && lines[index].trim().is_empty() {
+                            index += 1;
+                        }
+                        continue;
+                    }
+
+                    let color = if line.starts_with("~ (") {
+                        FG_MUTED
+                    } else if is_error_output_line(line) {
+                        Color32::from_rgb(255, 205, 205)
+                    } else {
+                        FG_PRIMARY
+                    };
+
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        ui.label(RichText::new(line).monospace().color(color));
+                    });
+                    previous_block_had_error = false;
+                    index += 1;
+                }
+            });
+
+        if transcript_ends_with_error {
+            ui.add_space(0.0);
+        } else {
+            ui.add_space(16.0);
+            draw_divider(ui, Color32::from_gray(60));
+            ui.add_space(12.0);
+        }
+
+        ui.horizontal(|ui| {
+            ui.add_space(14.0);
+            let short_cwd = truncate_path(&session.cwd, 40);
+            let directory_button = egui::Button::new(
+                RichText::new(format!("📁 {}", short_cwd))
+                    .color(FG_PRIMARY)
+                    .size(13.0)
+                    .monospace(),
+            )
+            .stroke(Stroke::new(1.0, Color32::from_gray(60)))
+            .corner_radius(6.0)
+            .fill(BG_PANEL_ALT)
+            .min_size(egui::vec2(0.0, 28.0));
+            if ui.add(directory_button).clicked() {
+                *directory_picker_open = true;
+                directory_picker_query.clear();
+            }
+        });
+
+        if *directory_picker_open {
+            let mut close_picker = false;
+            if ui.ctx().input(|input| input.key_pressed(Key::Escape)) {
+                close_picker = true;
+            }
+
+            egui::Window::new("directory_picker")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_size(egui::vec2(400.0, 332.0))
+                .anchor(egui::Align2::LEFT_BOTTOM, [14.0, -72.0])
+                .show(ui.ctx(), |ui| {
+                    let search_id = ui.make_persistent_id("directory_picker_search");
+                    let search = Frame::new()
+                        .fill(BG_APP)
+                        .stroke(Stroke::NONE)
+                        .inner_margin(egui::Margin::symmetric(10, 8))
+                        .show(ui, |ui| {
+                            ui.add_sized(
+                                [ui.available_width(), 28.0],
+                                egui::TextEdit::singleline(directory_picker_query)
+                                    .id(search_id)
+                                    .hint_text("Search directories...")
+                                    .frame(false),
+                            )
+                        })
+                        .inner;
+                    if !search.has_focus() {
+                        search.request_focus();
+                    }
+
+                    ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                        for option in directory_picker_options(&session.cwd, directory_picker_query)
+                        {
+                            let prefix = if option.is_parent { "↑" } else { "🗀" };
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width(), 28.0),
+                                egui::Sense::click(),
+                            );
+                            if response.hovered() {
+                                ui.painter().rect_filled(rect, 0.0, PICKER_HOVER);
+                            }
+
+                            let text_color = if response.hovered() {
+                                BG_APP
+                            } else if option.is_parent {
+                                FG_MUTED
+                            } else {
+                                FG_PRIMARY
+                            };
+                            ui.painter().text(
+                                egui::pos2(rect.min.x + 10.0, rect.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                prefix,
+                                egui::FontId::monospace(13.0),
+                                text_color,
+                            );
+                            ui.painter().text(
+                                egui::pos2(rect.min.x + 34.0, rect.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                &option.label,
+                                egui::FontId::monospace(12.0),
+                                text_color,
+                            );
+
+                            if response.clicked() {
+                                let command =
+                                    format!("cd {}", shell_quote_path(&option.target_path));
+                                if submit_shell_command(state, shell_txs, history_offset, command) {
+                                    shell_input.clear();
+                                    close_picker = true;
+                                }
+                            }
+                        }
+                    });
+                });
+            if close_picker {
+                *directory_picker_open = false;
+                directory_picker_query.clear();
+            }
+        }
+
+        ui.add_space(12.0);
+
+        let input_id = ui.make_persistent_id("shell_input");
+
+        let mut rect = ui.available_rect_before_wrap();
+        rect.set_height(24.0);
+        rect.min.x += 14.0;
+
+        let suggestion = state.get_terminal_suggestion(state.selected_terminal_idx, shell_input);
+        let suggestion_suffix = terminal_suggestion_suffix(shell_input, suggestion.as_deref());
+
+        if shell_input.is_empty() {
+            let mut placeholder_rect = rect;
+            placeholder_rect.min.x += 2.0;
+            let mut placeholder_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(placeholder_rect)
+                    .id_salt("placeholder_ui"),
+            );
+            placeholder_ui.label(
+                RichText::new("Run commands")
+                    .color(FG_MUTED)
+                    .size(13.0)
+                    .monospace(),
+            );
+        } else if let Some(ref suffix) = suggestion_suffix {
+            let mut ghost_rect = rect;
+            ghost_rect.min.x += 2.0;
+            let mut ghost_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(ghost_rect)
+                    .id_salt("ghost_ui"),
+            );
+            let font_id = egui::TextStyle::Monospace.resolve(ui.style());
+            let prefix_width = ui
+                .painter()
+                .layout_no_wrap(shell_input.clone(), font_id, Color32::TRANSPARENT)
+                .size()
+                .x;
+            ghost_ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.add_space(prefix_width);
+                ui.label(
+                    RichText::new(suffix)
+                        .color(Color32::from_gray(80))
+                        .size(13.0)
+                        .monospace(),
+                );
+
+                ui.add_space(12.0);
+                let arrow_frame = Frame::new()
+                    .stroke(Stroke::new(1.0, Color32::from_gray(50)))
+                    .corner_radius(4.0)
+                    .inner_margin(egui::Margin::symmetric(4, 2));
+                arrow_frame.show(ui, |ui| {
+                    ui.label(RichText::new("→▾").color(FG_MUTED).size(10.0).monospace());
+                });
+            });
+        }
+
+        let response = ui.add_sized(
+            [ui.available_width() - 28.0, 24.0],
+            egui::TextEdit::singleline(shell_input)
+                .id(input_id)
+                .frame(false)
+                .margin(egui::Margin::symmetric(14, 0))
+                .font(egui::TextStyle::Monospace),
+        );
+
+        if response.has_focus() {
+            let history = &session.history;
+            if !history.is_empty() {
+                if ui.input(|i| i.key_pressed(Key::ArrowUp)) {
+                    if *history_offset < history.len() {
+                        *history_offset += 1;
+                    }
+                    if let Some(entry) = history_entry_for_offset(history, *history_offset) {
+                        *shell_input = entry;
+                        if let Some(mut text_state) = egui::TextEdit::load_state(ui.ctx(), input_id)
+                        {
+                            let ccursor = egui::text::CCursor::new(shell_input.chars().count());
+                            text_state
+                                .cursor
+                                .set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
+                            text_state.store(ui.ctx(), input_id);
+                        }
+                    }
+                } else if ui.input(|i| i.key_pressed(Key::ArrowDown)) {
+                    if *history_offset > 1 {
+                        *history_offset -= 1;
+                        if let Some(entry) = history_entry_for_offset(history, *history_offset) {
+                            *shell_input = entry;
+                        }
+                    } else if *history_offset == 1 {
+                        *history_offset = 0;
+                        shell_input.clear();
+                    }
+                    if let Some(mut text_state) = egui::TextEdit::load_state(ui.ctx(), input_id) {
+                        let ccursor = egui::text::CCursor::new(shell_input.chars().count());
+                        text_state
+                            .cursor
+                            .set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
+                        text_state.store(ui.ctx(), input_id);
+                    }
+                }
+            }
+        }
+
+        if let Some(sugg) = suggestion {
+            if response.has_focus()
+                && (ui.input(|i| i.key_pressed(Key::Tab))
+                    || ui.input(|i| i.key_pressed(Key::ArrowRight)))
+            {
+                *shell_input = sugg;
+                if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), input_id) {
+                    let ccursor = egui::text::CCursor::new(shell_input.chars().count());
+                    state
+                        .cursor
+                        .set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
+                    state.store(ui.ctx(), input_id);
+                }
+            }
+        }
+
+        if !*directory_picker_open && !response.has_focus() && shell_input.is_empty() {
+            ui.memory_mut(|memory| memory.request_focus(input_id));
+        }
+        if response.lost_focus()
+            && ui.input(|input| input.key_pressed(Key::Enter))
+            && !shell_input.trim().is_empty()
+        {
+            let command = shell_input.trim().to_string();
+            if submit_shell_command(state, shell_txs, history_offset, command) {
+                shell_input.clear();
+                ui.memory_mut(|memory| memory.request_focus(input_id));
+            }
+        }
     });
 }
 
-fn spawn_core_runtime(state: Arc<Mutex<AppState>>) -> terminal::TerminalCommandTx {
-    let (shell_tx, shell_rx) = terminal::local_shell_command_tx();
+fn spawn_core_runtime(state: Arc<Mutex<AppState>>) -> Vec<terminal::TerminalCommandTx> {
+    let mut shell_txs = Vec::new();
+    let mut shell_rxs = Vec::new();
+    for _ in 0..1 {
+        let (tx, rx) = terminal::local_shell_command_tx();
+        shell_txs.push(tx);
+        shell_rxs.push(rx);
+    }
     thread::spawn(move || {
         let runtime = Builder::new_multi_thread()
             .enable_all()
@@ -820,10 +676,15 @@ fn spawn_core_runtime(state: Arc<Mutex<AppState>>) -> terminal::TerminalCommandT
                 };
             });
 
-            tokio::spawn(async move {
-                let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp"));
-                let _ = terminal::start_local_shell(cwd, terminal_event_tx, shell_rx).await;
-            });
+            for (session_id, shell_rx) in shell_rxs.into_iter().enumerate() {
+                let terminal_event_tx = terminal_event_tx.clone();
+                tokio::spawn(async move {
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp"));
+                    let _ =
+                        terminal::start_local_shell(session_id, cwd, terminal_event_tx, shell_rx)
+                            .await;
+                });
+            }
 
             let mut tick = time::interval(Duration::from_secs(1));
 
@@ -840,9 +701,18 @@ fn spawn_core_runtime(state: Arc<Mutex<AppState>>) -> terminal::TerminalCommandT
                     Some(terminal_event) = terminal_event_rx.recv() => {
                         let mut app = state.lock().await;
                         match terminal_event {
-                            TerminalEvent::Line(line) => app.append_terminal_line(line),
-                            TerminalEvent::Status(status) => app.set_terminal_status(status),
-                            TerminalEvent::Cwd(cwd) => app.set_terminal_cwd(cwd),
+                            TerminalEvent::Line { session_id, line } => {
+                                app.append_terminal_line(session_id, line)
+                            }
+                            TerminalEvent::Status { session_id, status } => {
+                                app.set_terminal_status(session_id, status)
+                            }
+                            TerminalEvent::Cwd { session_id, cwd } => {
+                                app.set_terminal_cwd(session_id, cwd)
+                            }
+                            TerminalEvent::Timing { session_id, seconds } => {
+                                app.finalize_terminal_context_line(session_id, seconds)
+                            }
                         }
                     }
                     _ = tick.tick() => {
@@ -853,7 +723,7 @@ fn spawn_core_runtime(state: Arc<Mutex<AppState>>) -> terminal::TerminalCommandT
             }
         });
     });
-    shell_tx
+    shell_txs
 }
 
 fn screenshot_target() -> Option<PathBuf> {
@@ -898,22 +768,21 @@ fn save_color_image(path: &PathBuf, image: &egui::ColorImage) -> anyhow::Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        grid_columns_for_width, grid_page_size, screenshot_target, trim_line, truncate_path,
+    use super::{screenshot_target, terminal_suggestion_suffix, trim_line, truncate_path};
+    use crate::shell::{
+        directory_picker_options, format_command_context_line, history_entry_for_offset,
+        shell_quote_path, terminal_suggestion_suffix as shell_suggestion_suffix,
     };
-
-    #[test]
-    fn grid_columns_should_scale_with_available_width() {
-        assert_eq!(grid_columns_for_width(700.0), 1);
-        assert_eq!(grid_columns_for_width(900.0), 2);
-        assert_eq!(grid_columns_for_width(1800.0), 3);
-        assert_eq!(grid_page_size(1800.0), 6);
-    }
+    use crate::transcript::{
+        command_block_has_error, command_clears_transcript, is_context_block_start,
+        is_legacy_context_block_start, should_extend_error_block_to_bottom,
+        should_render_block_separator,
+    };
 
     #[test]
     fn string_helpers_should_trim_without_panicking() {
         assert_eq!(trim_line("abcdef", 4), "abc…");
-        assert_eq!(truncate_path("/a/very/long/path/file.rs", 10), "…h/file.rs");
+        assert_eq!(truncate_path("/a/very/long/path/file.rs", 10), "…/file.rs");
     }
 
     #[test]
@@ -928,5 +797,111 @@ mod tests {
 
         std::env::remove_var("VIEW_DESKTOP_SCREENSHOT_TO");
         std::env::remove_var("EFRAME_SCREENSHOT_TO");
+    }
+
+    #[test]
+    fn terminal_suggestion_suffix_should_render_only_remaining_text() {
+        assert_eq!(
+            terminal_suggestion_suffix("cd ", Some("cd ..")),
+            Some("..".to_string())
+        );
+    }
+
+    #[test]
+    fn terminal_suggestion_suffix_should_ignore_exact_matches() {
+        assert_eq!(terminal_suggestion_suffix("cd ..", Some("cd ..")), None);
+    }
+
+    #[test]
+    fn command_clears_transcript_should_match_clear_aliases() {
+        assert!(command_clears_transcript("clear"));
+        assert!(command_clears_transcript(" cls "));
+        assert!(!command_clears_transcript("clear now"));
+    }
+
+    #[test]
+    fn command_block_has_error_should_detect_failed_command_output() {
+        let lines = vec![
+            "$ cd vivisual_interception_event_window",
+            "~ (0.0006s)",
+            "cd: no such file or directory: vivisual_interception_event_window",
+            "$ cd visual_interception_event_window",
+        ];
+
+        assert!(command_block_has_error(&lines, 0));
+        assert!(!command_block_has_error(&lines, 3));
+    }
+
+    #[test]
+    fn should_render_block_separator_should_skip_gap_below_error_blocks() {
+        assert!(should_render_block_separator(false, false));
+        assert!(!should_render_block_separator(true, false));
+        assert!(!should_render_block_separator(false, true));
+    }
+
+    #[test]
+    fn should_extend_error_block_to_bottom_should_only_apply_to_final_error_block() {
+        assert!(should_extend_error_block_to_bottom(true, true));
+        assert!(!should_extend_error_block_to_bottom(true, false));
+        assert!(!should_extend_error_block_to_bottom(false, true));
+    }
+
+    #[test]
+    fn format_command_context_line_should_include_git_details_when_present() {
+        assert_eq!(
+            format_command_context_line(
+                "/tmp/project",
+                Some("main"),
+                Some("4 files changed, 10 insertions(+)")
+            ),
+            "/tmp/project git:(main) 4 files changed, 10 insertions(+)"
+        );
+    }
+
+    #[test]
+    fn context_block_detection_should_handle_current_and_legacy_layouts() {
+        let current = vec!["/tmp/project git:(main)", "$ ls"];
+        let legacy = vec!["", "/tmp/project git:(main)", "$ ls"];
+
+        assert!(is_context_block_start(&current, 0));
+        assert!(is_legacy_context_block_start(&legacy, 0));
+    }
+
+    #[test]
+    fn history_entry_for_offset_should_return_most_recent_first() {
+        let history = std::collections::VecDeque::from(vec!["ls".to_string(), "cd ..".to_string()]);
+
+        assert_eq!(
+            history_entry_for_offset(&history, 1).as_deref(),
+            Some("cd ..")
+        );
+        assert_eq!(history_entry_for_offset(&history, 2).as_deref(), Some("ls"));
+    }
+
+    #[test]
+    fn shell_quote_path_should_escape_single_quotes() {
+        assert_eq!(shell_quote_path("/tmp/it's-here"), "'/tmp/it'\\''s-here'");
+    }
+
+    #[test]
+    fn directory_picker_options_should_include_parent_and_filter_children() {
+        let root = std::env::temp_dir().join(format!(
+            "view-picker-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("alpha")).expect("alpha");
+        std::fs::create_dir_all(root.join("beta")).expect("beta");
+
+        let options = directory_picker_options(root.to_str().expect("utf8"), "alp");
+
+        assert!(options.iter().any(|option| option.is_parent));
+        assert!(options.iter().any(|option| option.label == "alpha"));
+        assert!(!options.iter().any(|option| option.label == "beta"));
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }

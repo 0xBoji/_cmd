@@ -1,6 +1,0 @@
-{
-  "timestamp": "2026-04-07T23:55:10Z",
-  "agent_id": "agent-01",
-  "kind": "TaskExecuted",
-  "payload": "Ran unit tests in wasp sandbox."
-}

@@ -1,4 +1,7 @@
 mod desktop_app;
+mod shell;
+mod shortcuts;
+mod transcript;
 
 use anyhow::Result;
 use desktop_app::ViewDesktopApp;
