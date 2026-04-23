@@ -29,8 +29,8 @@ pub mod ws;
 
 use anyhow::Result;
 use axum::{routing::get, Router};
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use view_core::app::AppState;

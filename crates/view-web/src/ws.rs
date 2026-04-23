@@ -29,10 +29,7 @@ use tokio::time;
 use crate::SharedState;
 
 /// Axum route handler — upgrades an HTTP request to a WebSocket connection.
-pub async fn handler(
-    ws: WebSocketUpgrade,
-    State(state): State<SharedState>,
-) -> impl IntoResponse {
+pub async fn handler(ws: WebSocketUpgrade, State(state): State<SharedState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| drive_socket(socket, state))
 }
 

@@ -27,7 +27,7 @@ impl CoreEngine {
     /// Start the engine tasks. Must be called from inside a tokio runtime context.
     pub fn spawn_background(state: Arc<RwLock<AppState>>) -> mpsc::UnboundedSender<Action> {
         let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-        
+
         let (event_tx, mut event_rx) = mpsc::channel::<Event>(64);
         let (agent_tx, mut agent_rx) = mpsc::channel::<Agent>(64);
         let (terminal_event_tx, mut terminal_event_rx) = mpsc::unbounded_channel::<TerminalEvent>();
@@ -53,7 +53,7 @@ impl CoreEngine {
                                 let (tx, rx) = terminal::local_shell_command_tx();
                                 let session_id = shell_txs.len();
                                 shell_txs.push(tx);
-                                
+
                                 let term_event_tx = terminal_event_tx.clone();
                                 tokio::spawn(async move {
                                     let _ = terminal::start_local_shell(session_id, cwd, term_event_tx, rx).await;

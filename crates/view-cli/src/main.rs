@@ -6,12 +6,12 @@ mod app {
 
 // Listener module no longer needed, Engine handles it
 
+use parking_lot::RwLock;
 use std::{
     io::{self, Stdout},
     sync::Arc,
     time::Duration,
 };
-use parking_lot::RwLock;
 
 use anyhow::Result;
 use crossterm::{
@@ -50,7 +50,7 @@ impl Drop for TerminalGuard {
 #[tokio::main]
 async fn main() -> Result<()> {
     let app_state = Arc::new(RwLock::new(AppState::new()));
-    
+
     // Spawn the core engine which manages all background processes and state mutations
     let _action_tx = CoreEngine::spawn_background(app_state.clone());
 
@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         if event::poll(Duration::from_millis(0))? {
             if let CEvent::Key(key) = event::read()? {
                 let mut state = app_state.write();
-                if state.search_mode {
+                if state.ui.search_mode {
                     match (key.code, key.modifiers) {
                         (KeyCode::Esc, _) => {
                             state.clear_search_query();
@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
                         }
                         (KeyCode::Enter, _) => state.end_search(),
                         (KeyCode::Backspace, _) => state.pop_search_char(),
-                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => state.should_quit = true,
+                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => state.ui.should_quit = true,
                         (KeyCode::Char(ch), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
                             state.append_search_char(ch);
                         }
@@ -81,8 +81,8 @@ async fn main() -> Result<()> {
                     }
                 } else {
                     match (key.code, key.modifiers) {
-                        (KeyCode::Char('q'), _) => state.should_quit = true,
-                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => state.should_quit = true,
+                        (KeyCode::Char('q'), _) => state.ui.should_quit = true,
+                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => state.ui.should_quit = true,
                         (KeyCode::Down, _) | (KeyCode::Char('j'), _) => state.select_next(),
                         (KeyCode::Up, _) | (KeyCode::Char('k'), _) => state.select_previous(),
                         (KeyCode::PageDown, _) => state.select_next_page(),
@@ -101,7 +101,7 @@ async fn main() -> Result<()> {
 
         {
             let state = app_state.read();
-            if state.should_quit {
+            if state.ui.should_quit {
                 break;
             }
             guard.terminal.draw(|frame| ui::render(frame, &state))?;

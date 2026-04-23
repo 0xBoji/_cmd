@@ -30,7 +30,7 @@ pub fn render(f: &mut Frame, app: &AppState) {
         f.size(),
     );
 
-    if app.view_mode == ViewMode::Grid {
+    if app.ui.view_mode == ViewMode::Grid {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -100,10 +100,10 @@ fn render_grid_tabs(f: &mut Frame, app: &AppState, area: Rect, workspace_area: R
             page,
             total_pages,
             app.filter_label(),
-            if app.search_query.is_empty() {
-                "none".to_string()
+            if app.ui.search_query.is_empty() {
+                "inactive".to_string()
             } else {
-                truncate_text(&app.search_query, 10)
+                truncate_text(&app.ui.search_query, 10)
             }
         ),
         Style::default().fg(FG_MUTED),
@@ -124,7 +124,7 @@ fn render_grid_tabs(f: &mut Frame, app: &AppState, area: Rect, workspace_area: R
 }
 
 fn render_workspace(f: &mut Frame, app: &AppState, area: Rect) {
-    if app.view_mode == ViewMode::Grid {
+    if app.ui.view_mode == ViewMode::Grid {
         render_agent_grid(f, app, area);
         return;
     }
@@ -189,12 +189,12 @@ fn render_header(f: &mut Frame, app: &AppState, area: Rect) {
         ),
         Span::raw(" │ "),
         Span::styled(
-            format!("EVENTS {}", app.total_events_received),
+            format!("EVENTS {}", app.registry.total_events_received),
             Style::default().fg(BORDER_SECONDARY),
         ),
         Span::raw(" │ "),
         Span::styled(
-            match app.view_mode {
+            match app.ui.view_mode {
                 ViewMode::Grid => "GRID",
                 ViewMode::Focus => "FOCUS",
             },
@@ -337,10 +337,10 @@ fn build_focus_lines(app: &AppState) -> Vec<Line<'static>> {
             metric_line("FOCUS", "ALL AGENTS".to_string(), FG_PRIMARY),
             Line::from(format!(
                 "Search {}",
-                if app.search_query.is_empty() {
-                    "inactive".to_string()
+                if app.ui.search_query.is_empty() {
+                    "press / to search".to_string()
                 } else {
-                    format!("'{}'", truncate_text(&app.search_query, 14))
+                    format!("'{}'", truncate_text(&app.ui.search_query, 14))
                 }
             )),
         ]
@@ -348,7 +348,7 @@ fn build_focus_lines(app: &AppState) -> Vec<Line<'static>> {
 }
 
 fn build_latest_signal_lines(app: &AppState) -> Vec<Line<'static>> {
-    if let Some(event) = app.events.front() {
+    if let Some(event) = app.registry.events.front() {
         vec![
             metric_line("STATE", stream_label(app).to_string(), stream_color(app)),
             metric_line(
@@ -424,12 +424,12 @@ fn activity_samples(app: &AppState) -> Vec<u64> {
         return combined;
     }
 
-    if app.agents.is_empty() {
+    if app.registry.agents.is_empty() {
         return vec![0; MESH_PULSE_SAMPLES];
     }
 
     let mut combined = vec![0; MESH_PULSE_SAMPLES];
-    for agent in app.agents.values() {
+    for agent in app.registry.agents.values() {
         let samples = agent.activity.iter().copied().collect::<Vec<_>>();
         for (idx, value) in samples.into_iter().enumerate().take(MESH_PULSE_SAMPLES) {
             combined[idx] += value;
@@ -608,9 +608,10 @@ fn render_mesh_list(f: &mut Frame, app: &AppState, area: Rect) {
             .iter()
             .enumerate()
             .filter_map(|(idx, id)| {
-                app.agents
+                app.registry
+                    .agents
                     .get(id)
-                    .map(|agent| build_agent_list_item(agent, idx == app.selected_agent_idx))
+                    .map(|agent| build_agent_list_item(agent, idx == app.ui.selected_agent_idx))
             })
             .collect::<Vec<_>>()
     };
@@ -619,10 +620,10 @@ fn render_mesh_list(f: &mut Frame, app: &AppState, area: Rect) {
         " [ Mesh Roster • {} • filter:{} • search:{} ] ",
         app.visible_agent_count(),
         app.filter_label(),
-        if app.search_query.is_empty() {
-            "none".to_string()
+        if app.ui.search_query.is_empty() {
+            String::new()
         } else {
-            truncate_text(&app.search_query, 12)
+            truncate_text(&app.ui.search_query, 12)
         }
     );
     let list = List::new(items)
@@ -691,7 +692,7 @@ fn render_agent_grid(f: &mut Frame, app: &AppState, area: Rect) {
         for (col_index, cell_area) in col_chunks.iter().enumerate() {
             let tile_index = row_index * columns + col_index;
             if let Some(id) = visible_ids.get(tile_index) {
-                if let Some(agent) = app.agents.get(id) {
+                if let Some(agent) = app.registry.agents.get(id) {
                     render_agent_tile(
                         f,
                         agent,
@@ -912,9 +913,9 @@ fn render_log_focus(f: &mut Frame, app: &AppState, area: Rect) {
 }
 
 fn stream_label(app: &AppState) -> &'static str {
-    if !app.events.is_empty() {
+    if !app.registry.events.is_empty() {
         "LIVE"
-    } else if !app.agents.is_empty() {
+    } else if !app.registry.agents.is_empty() {
         "TRACKING"
     } else {
         "AWAITING"

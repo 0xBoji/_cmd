@@ -1,24 +1,23 @@
-use eframe::egui::{self, Align, Color32, Event, Frame, Key, Layout, RichText, ScrollArea, Stroke, ViewportCommand};
+use eframe::egui::{
+    self, Align, Color32, Event, Frame, Key, Layout, RichText, ScrollArea, Stroke, ViewportCommand,
+};
 use image::{ImageBuffer, Rgba};
+use parking_lot::RwLock;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
-use parking_lot::RwLock;
+use std::time::Duration;
 use tokio::runtime::Builder;
-use tokio::time::{self, Duration};
+use tokio::sync::mpsc;
 use view_core::{
     app::AppState,
     engine::{Action, CoreEngine},
-    listener,
-    terminal::{self, TerminalEvent},
 };
-use tokio::sync::mpsc;
 
 use crate::{
-    shell,
-    shortcuts,
+    shell, shortcuts,
     transcript::{
         command_block_has_error, is_command_context_line, is_context_block_start,
         is_error_output_line, is_legacy_context_block_start, should_extend_error_block_to_bottom,
@@ -279,7 +278,7 @@ fn render_focus_terminal(
         ui.separator();
 
         let transcript_height = (ui.available_height() - 110.0).max(180.0);
-        let lines = state.recent_terminal_lines(state.selected_terminal_idx, 64);
+        let lines = state.recent_terminal_lines(state.ui.selected_terminal_idx, 64);
         let transcript_ends_with_error = lines
             .iter()
             .rposition(|line| line.starts_with("$ "))
@@ -496,7 +495,12 @@ fn render_focus_terminal(
                             if response.clicked() {
                                 let command =
                                     format!("cd {}", shell_quote_path(&option.target_path));
-                                if submit_shell_command(state, action_tx.clone(), history_offset, command) {
+                                if submit_shell_command(
+                                    state,
+                                    action_tx.clone(),
+                                    history_offset,
+                                    command,
+                                ) {
                                     shell_input.clear();
                                     close_picker = true;
                                 }
@@ -518,7 +522,7 @@ fn render_focus_terminal(
         rect.set_height(24.0);
         rect.min.x += 14.0;
 
-        let suggestion = state.get_terminal_suggestion(state.selected_terminal_idx, shell_input);
+        let suggestion = state.get_terminal_suggestion(state.ui.selected_terminal_idx, shell_input);
         let suggestion_suffix = terminal_suggestion_suffix(shell_input, suggestion.as_deref());
 
         if shell_input.is_empty() {
@@ -652,7 +656,7 @@ fn render_focus_terminal(
 
 fn spawn_core_runtime(state: Arc<RwLock<AppState>>) -> mpsc::UnboundedSender<Action> {
     let (tx, mut rx) = mpsc::unbounded_channel::<mpsc::UnboundedSender<Action>>();
-    
+
     thread::spawn(move || {
         let runtime = Builder::new_multi_thread()
             .enable_all()
@@ -684,9 +688,10 @@ fn spawn_core_runtime(state: Arc<RwLock<AppState>>) -> mpsc::UnboundedSender<Act
             std::future::pending::<()>().await;
         });
     });
-    
+
     // Wait for the runtime to boot up and return the actual action_tx
-    rx.blocking_recv().expect("Failed to receive action_tx from background thread")
+    rx.blocking_recv()
+        .expect("Failed to receive action_tx from background thread")
 }
 
 fn screenshot_target() -> Option<PathBuf> {

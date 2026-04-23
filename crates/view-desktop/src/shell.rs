@@ -5,9 +5,9 @@
 
 use std::path::Path;
 use std::process::Command;
+use tokio::sync::mpsc;
 use view_core::app::AppState;
 use view_core::engine::Action;
-use tokio::sync::mpsc;
 
 // ── Git helpers ────────────────────────────────────────────────────────────────
 
@@ -70,17 +70,6 @@ pub fn format_command_context_line(
 
 pub fn shell_quote_path(path: &str) -> String {
     format!("'{}'", path.replace('\'', "'\\''"))
-}
-
-pub fn truncate_path(value: &str, _max_chars: usize) -> String {
-    let parts: Vec<&str> = value.split('/').filter(|s| !s.is_empty()).collect();
-    if parts.is_empty() {
-        return "/".to_string();
-    }
-    if parts.len() == 1 {
-        return format!("/{}", parts[0]);
-    }
-    format!("…/{}", parts.last().unwrap_or(&""))
 }
 
 // ── History helpers ────────────────────────────────────────────────────────────
@@ -157,15 +146,15 @@ pub fn submit_shell_command(
     history_offset: &mut usize,
     command: String,
 ) -> bool {
-    let session_id = state.selected_terminal_idx;
+    let session_id = state.ui.selected_terminal_idx;
     if state.selected_terminal().is_none() {
         return false;
     }
 
-    state.append_terminal_history(state.selected_terminal_idx, command.clone());
+    state.append_terminal_history(state.ui.selected_terminal_idx, command.clone());
 
     if crate::transcript::command_clears_transcript(&command) {
-        state.clear_terminal_lines(state.selected_terminal_idx);
+        state.clear_terminal_lines(state.ui.selected_terminal_idx);
     } else {
         let cwd = state
             .selected_terminal()
@@ -179,8 +168,8 @@ pub fn submit_shell_command(
                 .as_ref()
                 .and_then(|(_, summary)| summary.as_deref()),
         );
-        state.append_terminal_context_line(state.selected_terminal_idx, context_line);
-        state.append_terminal_line(state.selected_terminal_idx, format!("$ {command}"));
+        state.append_terminal_context_line(state.ui.selected_terminal_idx, context_line);
+        state.append_terminal_line(state.ui.selected_terminal_idx, format!("$ {command}"));
     }
 
     let _ = action_tx.send(Action::SubmitCommand {

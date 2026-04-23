@@ -46,7 +46,7 @@ pub fn handle(ctx: &egui::Context, state: &mut AppState) -> bool {
         consumed = true;
     }
     if ctx.input(|i| i.key_pressed(Key::W) && i.modifiers.command) {
-        let idx = state.selected_terminal_idx;
+        let idx = state.ui.selected_terminal_idx;
         state.remove_terminal_session(idx);
         consumed = true;
     }
@@ -72,15 +72,13 @@ pub fn handle(ctx: &egui::Context, state: &mut AppState) -> bool {
 
     // Cmd+Shift+] / Cmd+Shift+[ — next/prev terminal tab
     if ctx.input(|i| i.key_pressed(Key::ArrowRight) && i.modifiers.command) {
-        let next = state
-            .selected_terminal_idx
-            .saturating_add(1)
-            .min(state.terminal_sessions().len().saturating_sub(1));
+        let count = state.terminal_sessions().len();
+        let next = (state.ui.selected_terminal_idx + 1) % count;
         state.select_terminal_index(next);
         consumed = true;
     }
     if ctx.input(|i| i.key_pressed(Key::ArrowLeft) && i.modifiers.command) {
-        let prev = state.selected_terminal_idx.saturating_sub(1);
+        let prev = state.ui.selected_terminal_idx.saturating_sub(1);
         state.select_terminal_index(prev);
         consumed = true;
     }
