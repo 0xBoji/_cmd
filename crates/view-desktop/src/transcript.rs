@@ -30,10 +30,10 @@ pub fn command_block_has_error(lines: &[&str], prompt_index: usize) -> bool {
 }
 
 pub fn should_render_block_separator(
-    previous_block_had_error: bool,
-    current_block_has_error: bool,
+    _previous_block_had_error: bool,
+    _current_block_has_error: bool,
 ) -> bool {
-    !current_block_has_error && !previous_block_had_error
+    true
 }
 
 pub fn should_extend_error_block_to_bottom(has_error: bool, is_last_block: bool) -> bool {
