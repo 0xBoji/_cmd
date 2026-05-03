@@ -1,9 +1,9 @@
 [workspace]
 members = [
-  "crates/view-core",
-  "crates/view-cli",
-  "crates/view-desktop",
-  "crates/view-web",
+  "crates/core",
+  "crates/cli",
+  "crates/desktop",
+  "crates/web",
 ]
 resolver = "2"
 
@@ -13,3 +13,21 @@ version = "0.1.0"
 license = "MIT"
 description = "VIEW mission-control workspace"
 rust-version = "1.78"
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = true
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+# Optimized release profile for smaller binary size
+# Usage: cargo build --profile release-opt
+[profile.release-opt]
+inherits = "release"
+opt-level = "z"           # Optimize for size
+lto = "fat"               # Full LTO for better optimization
+codegen-units = 1         # Single codegen unit for better optimization
+strip = "symbols"         # Strip debug symbols
+panic = "abort"           # Smaller panic implementation

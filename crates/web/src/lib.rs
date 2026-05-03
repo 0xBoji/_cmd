@@ -1,4 +1,4 @@
-//! `view-web` — LAN remote access server for VIEW.
+//! `web` — LAN remote access server for VIEW.
 //!
 //! Exposes a lightweight Axum HTTP + WebSocket server so any device on
 //! the local network can observe agent mesh state in real-time.
@@ -12,15 +12,16 @@
 //! | GET | `/api/snapshot` | Full `WebSnapshot` (JSON) |
 //! | GET | `/ws` | WebSocket — pushes `WebSnapshot` every 500 ms |
 //!
-//! ## Usage (from view-desktop runtime)
+//! ## Usage (from desktop runtime)
 //! ```no_run
 //! use std::sync::Arc;
-//! use tokio::sync::Mutex;
-//! use view_core::app::AppState;
+//! use parking_lot::RwLock;
+//! use core::app::AppState;
 //!
-//! # async fn example() {
-//! let state = Arc::new(Mutex::new(AppState::new()));
-//! view_web::start(state, 23779).await.unwrap();
+//! # async fn example() -> anyhow::Result<()> {
+//! let state = Arc::new(RwLock::new(AppState::new()));
+//! web::start(state, 23779).await?;
+//! # Ok(())
 //! # }
 //! ```
 
@@ -29,11 +30,11 @@ pub mod ws;
 
 use anyhow::Result;
 use axum::{routing::get, Router};
+use core::app::AppState;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
-use view_core::app::AppState;
 
 /// Shared state type threaded through Axum handlers.
 pub type SharedState = Arc<RwLock<AppState>>;

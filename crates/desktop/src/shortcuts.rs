@@ -4,8 +4,8 @@
 //! (e.g., history navigation inside the shell input) remains in their respective
 //! render modules.
 
+use core::app::{AppState, SplitAxis};
 use eframe::egui::{self, Key};
-use view_core::app::AppState;
 
 /// Handle all application-level keyboard shortcuts.
 ///
@@ -38,11 +38,15 @@ pub fn handle(ctx: &egui::Context, state: &mut AppState) -> bool {
         consumed = true;
     }
 
-    // ── Terminal tab management (Cmd+T / Cmd+W / Cmd+1..9) ────────────────
-    if ctx.input(|i| i.key_pressed(Key::T) && i.modifiers.command) {
-        // New terminal — caller must wire a new shell process via add_terminal_session
+    // ── Terminal pane management (Cmd+T / Cmd+Shift+T / Cmd+W / Cmd+1..9) ──
+    if ctx.input(|i| i.key_pressed(Key::T) && i.modifiers.command && i.modifiers.shift) {
         let count = state.terminal_sessions().len();
-        state.add_terminal_session(format!("shell-{}", count + 1));
+        state.split_selected_terminal(format!("shell-{}", count + 1), SplitAxis::Horizontal);
+        consumed = true;
+    }
+    if ctx.input(|i| i.key_pressed(Key::T) && i.modifiers.command && !i.modifiers.shift) {
+        let count = state.terminal_sessions().len();
+        state.split_selected_terminal(format!("shell-{}", count + 1), SplitAxis::Vertical);
         consumed = true;
     }
     if ctx.input(|i| i.key_pressed(Key::W) && i.modifiers.command) {
@@ -70,16 +74,13 @@ pub fn handle(ctx: &egui::Context, state: &mut AppState) -> bool {
         }
     }
 
-    // Cmd+Shift+] / Cmd+Shift+[ — next/prev terminal tab
+    // Cmd+ArrowRight / Cmd+ArrowLeft — cycle active pane
     if ctx.input(|i| i.key_pressed(Key::ArrowRight) && i.modifiers.command) {
-        let count = state.terminal_sessions().len();
-        let next = (state.ui.selected_terminal_idx + 1) % count;
-        state.select_terminal_index(next);
+        state.focus_next_terminal();
         consumed = true;
     }
     if ctx.input(|i| i.key_pressed(Key::ArrowLeft) && i.modifiers.command) {
-        let prev = state.ui.selected_terminal_idx.saturating_sub(1);
-        state.select_terminal_index(prev);
+        state.focus_previous_terminal();
         consumed = true;
     }
 

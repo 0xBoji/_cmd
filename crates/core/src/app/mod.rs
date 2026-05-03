@@ -1,12 +1,16 @@
+pub mod panes;
 pub mod registry;
 pub mod terminals;
 pub mod ui;
 
+pub use panes::{PaneNode, PaneRect, PaneTree, SplitAxis};
 pub use registry::{Agent, AgentRegistry, AgentStatusSummary, Event, EventLevelSummary};
 pub use terminals::{TerminalManager, TerminalSnapshot, TerminalState};
 pub use ui::{AgentFilterMode, UiState, ViewMode};
 
 use serde::Serialize;
+use std::collections::VecDeque;
+use crate::terminal::TerminalSize;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WebSnapshot {
@@ -35,10 +39,15 @@ impl AppState {
     }
 
     pub fn new_with_sessions(count: usize) -> Self {
+        let terminals = TerminalManager::new(count);
+        let selected_terminal_idx = terminals.active_session_id();
         Self {
             registry: AgentRegistry::new(),
-            terminals: TerminalManager::new(count),
-            ui: UiState::new(),
+            terminals,
+            ui: UiState {
+                selected_terminal_idx,
+                ..UiState::new()
+            },
         }
     }
 
@@ -186,10 +195,32 @@ impl AppState {
         }
     }
 
-    pub fn set_terminal_cwd(&mut self, session_id: usize, cwd: impl Into<String>) {
+    pub fn set_terminal_last_command(&mut self, session_id: usize, command: String) {
         if let Some(session) = self.terminals.sessions.get_mut(session_id) {
-            session.cwd = cwd.into();
+            session.last_command = Some(command);
         }
+    }
+
+    pub fn set_terminal_last_exit_code(&mut self, session_id: usize, exit_code: i32) {
+        if let Some(session) = self.terminals.sessions.get_mut(session_id) {
+            session.last_exit_code = Some(exit_code);
+        }
+    }
+
+    pub fn set_terminal_viewport_size(&mut self, session_id: usize, size: TerminalSize) -> bool {
+        self.terminals.set_viewport_size(session_id, size)
+    }
+
+    pub fn set_terminal_cwd(&mut self, session_id: usize, cwd: impl Into<String>) -> bool {
+        let Some(session) = self.terminals.sessions.get_mut(session_id) else {
+            return false;
+        };
+        let cwd = cwd.into();
+        if session.cwd == cwd {
+            return false;
+        }
+        session.cwd = cwd;
+        true
     }
 
     pub fn recent_terminal_lines(&self, session_id: usize, limit: usize) -> Vec<&str> {
@@ -209,6 +240,28 @@ impl AppState {
         self.terminals.append_history(session_id, command);
     }
 
+    pub fn seed_terminal_history<I>(&mut self, history: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.terminals.seed_history(history);
+    }
+
+    pub fn seed_directory_history<I>(&mut self, history: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.terminals.seed_directory_history(history);
+    }
+
+    pub fn record_directory_visit(&mut self, path: String) {
+        self.terminals.record_directory_visit(path);
+    }
+
+    pub fn terminal_directory_history(&self) -> &VecDeque<String> {
+        &self.terminals.directory_history
+    }
+
     pub fn get_terminal_suggestion(&self, session_id: usize, input: &str) -> Option<String> {
         self.terminals.get_suggestion(session_id, input)
     }
@@ -218,14 +271,24 @@ impl AppState {
     }
 
     pub fn add_terminal_session(&mut self, title: impl Into<String>) -> Option<usize> {
-        self.terminals.add_session(title)
+        let index = self.terminals.add_session(title)?;
+        self.ui.selected_terminal_idx = self.terminals.active_session_id();
+        Some(index)
+    }
+
+    pub fn split_selected_terminal(
+        &mut self,
+        title: impl Into<String>,
+        axis: SplitAxis,
+    ) -> Option<usize> {
+        let index = self.terminals.add_session_split(title, axis)?;
+        self.ui.selected_terminal_idx = self.terminals.active_session_id();
+        Some(index)
     }
 
     pub fn remove_terminal_session(&mut self, index: usize) -> bool {
         if self.terminals.remove_session(index) {
-            if self.ui.selected_terminal_idx >= self.terminals.sessions.len() {
-                self.ui.selected_terminal_idx = self.terminals.sessions.len() - 1;
-            }
+            self.ui.selected_terminal_idx = self.terminals.active_session_id();
             true
         } else {
             false
@@ -233,16 +296,44 @@ impl AppState {
     }
 
     pub fn selected_terminal(&self) -> Option<&TerminalState> {
-        self.terminals.sessions.get(self.ui.selected_terminal_idx)
+        self.terminals.sessions.get(self.terminals.active_session_id())
     }
 
     pub fn select_terminal_index(&mut self, index: usize) {
         if self.terminals.sessions.is_empty() {
             self.ui.selected_terminal_idx = 0;
         } else {
-            self.ui.selected_terminal_idx = index.min(self.terminals.sessions.len() - 1);
+            let index = index.min(self.terminals.sessions.len() - 1);
+            let _ = self.terminals.select_session(index);
+            self.ui.selected_terminal_idx = self.terminals.active_session_id();
             self.ui.view_mode = ViewMode::Focus;
         }
+    }
+
+    pub fn focus_next_terminal(&mut self) -> bool {
+        if self.terminals.focus_next_session() {
+            self.ui.selected_terminal_idx = self.terminals.active_session_id();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn focus_previous_terminal(&mut self) -> bool {
+        if self.terminals.focus_previous_session() {
+            self.ui.selected_terminal_idx = self.terminals.active_session_id();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn terminal_pane_layout(&self, rect: PaneRect, gap: f32) -> Vec<(usize, PaneRect)> {
+        self.terminals.pane_layout(rect, gap)
+    }
+
+    pub fn terminal_pane_tree(&self) -> &PaneTree {
+        &self.terminals.pane_tree
     }
 
     pub fn select_visible_index(&mut self, index: usize) {

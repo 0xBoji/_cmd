@@ -16,9 +16,9 @@ Build `view` (Visual Interception Event Window), a **passive terminal agent dash
     - **Stateless/Passive**: It does not modify the state of other agents; it only visualizes observed state.
 
 ## Required Technical Choices
-- `ratatui` for TUI layout and widgets (`view-cli`).
-- `egui`/`eframe` for native desktop UI (`view-desktop`).
-- `axum` for the web API and WebSocket server (`view-web`).
+- `ratatui` for TUI layout and widgets (`cli`).
+- `egui`/`eframe` for native desktop UI (`desktop`).
+- `axum` for the web API and WebSocket server (`web`).
 - `crossterm` for terminal backend and raw mode handling.
 - `tokio` for async runtime and MPSC channels.
 - `serde` and `serde_json` for event parsing.
@@ -30,10 +30,10 @@ Build `view` (Visual Interception Event Window), a **passive terminal agent dash
 
 ```
 crates/
-├── view-core/     — domain state, engine, listener, event schemas (no UI deps)
-├── view-cli/      — TUI frontend via ratatui + crossterm
-├── view-desktop/  — desktop frontend via egui/eframe
-└── view-web/      — web API + WebSocket server via axum
+├── core/     — domain state, engine, listener, event schemas (no UI deps)
+├── cli/      — TUI frontend via ratatui + crossterm
+├── desktop/  — desktop frontend via egui/eframe
+└── web/      — web API + WebSocket server via axum
 ```
 
 **State access pattern:**
@@ -51,7 +51,7 @@ state.ui.selected_*        // UiState — ephemeral interaction state
 - **Panic-free**: No `unwrap()`, `expect()`, or `panic!` macros in production execution paths. Use `?`, `if let`, or `match`.
 - **Terminal Hygiene**: Use RAII guards (`Drop` implementation) to ensure the terminal is restored (raw mode off, alternate screen left) even on panics or unexpected exits.
 - **Concurrency**: UI thread must remain responsive; use `parking_lot::RwLock` for state shared across threads. Never block the egui/ratatui render thread.
-- **IME Disabled** (`view-desktop`): `ctx.output_mut(|o| o.ime = None)` must run every frame to prevent macOS IME interference.
+- **IME Disabled** (`desktop`): `ctx.output_mut(|o| o.ime = None)` must run every frame to prevent macOS IME interference.
 
 ## Commit and Agent-Knowledge Rules
 - Treat git history as part of the agent memory for this repo.

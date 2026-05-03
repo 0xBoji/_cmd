@@ -1,5 +1,5 @@
 [package]
-name = "view-cli"
+name = "cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ keywords = ["terminal", "tui", "agents", "observability", "dashboard"]
 categories = ["command-line-interface", "development-tools"]
 
 [dependencies]
-view-core = { path = "../view-core" }
+core = { path = "../core" }
 ratatui = "0.26"
 crossterm = "0.27"
 tokio = { version = "1", features = ["full"] }

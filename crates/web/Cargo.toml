@@ -1,5 +1,5 @@
 [package]
-name = "view-web"
+name = "web"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,11 +9,11 @@ keywords = ["web", "websocket", "axum", "observability", "lan"]
 categories = ["web-programming", "development-tools"]
 
 [lib]
-name = "view_web"
+name = "web"
 path = "src/lib.rs"
 
 [dependencies]
-view-core = { path = "../view-core" }
+core = { path = "../core" }
 axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5", features = ["cors"] }
 tokio = { version = "1", features = ["full"] }

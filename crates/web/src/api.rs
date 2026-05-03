@@ -12,7 +12,7 @@ use crate::SharedState;
 /// `GET /` — server info, useful as a health check from any device.
 pub async fn root_info() -> Json<Value> {
     Json(json!({
-        "service": "view-web",
+        "service": "web",
         "version": env!("CARGO_PKG_VERSION"),
         "description": "VIEW LAN remote access server",
         "endpoints": {

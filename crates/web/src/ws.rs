@@ -91,8 +91,5 @@ async fn send_snapshot(socket: &mut WebSocket, state: &SharedState) -> Result<()
         }
     };
 
-    socket
-        .send(Message::Text(text.into()))
-        .await
-        .map_err(|_| ())
+    socket.send(Message::Text(text)).await.map_err(|_| ())
 }

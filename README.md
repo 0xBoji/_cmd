@@ -37,10 +37,10 @@ A passive, real-time terminal dashboard for monitoring local AI coding agents.
 
 | Crate | Role |
 |---|---|
-| `view-core` | Domain state, engine, listener, and event schemas. No UI deps. Shared by all. |
-| `view-cli` | TUI frontend via `ratatui` + `crossterm` |
-| `view-desktop` | Native desktop frontend via `egui`/`eframe` |
-| `view-web` | Web API + WebSocket server via `axum` (LAN-accessible) |
+| `core` | Domain state, engine, listener, and event schemas. No UI deps. Shared by all. |
+| `cli` | TUI frontend via `ratatui` + `crossterm` |
+| `desktop` | Native desktop frontend via `egui`/`eframe` |
+| `web` | Web API + WebSocket server via `axum` (LAN-accessible) |
 
 The dashboard:
 
@@ -50,7 +50,7 @@ The dashboard:
 - highlights status, error level, branch, role, token usage, and metadata in real time,
 - supports grid and focus workflows for multi-agent monitoring.
 
-The operator-facing binary is named **`view`**. Until a crates.io publish, run locally with `cargo run -p view-cli` or `cargo run -p view-desktop`.
+The operator-facing binary is named **`view`**. Until a crates.io publish, run locally with `cargo run -p cli` or `cargo run -p desktop`.
 
 ---
 
@@ -106,8 +106,8 @@ Current implementation includes:
 - agent drill-down for role, branch, tokens, addresses, and metadata,
 - recent-event feed with level-aware colors (`info`, `warn`, `error`, `success`),
 - rolling activity sparklines and event buffering,
-- native desktop shell (`view-desktop`) sharing the same `view-core` backend,
-- web API + WebSocket server (`view-web`) for LAN remote access,
+- native desktop shell (`desktop`) sharing the same `core` backend,
+- web API + WebSocket server (`web`) for LAN remote access,
 - unit tests covering listener parsing, view-state behavior, and key rendering invariants.
 
 ---
@@ -116,13 +116,13 @@ Current implementation includes:
 
 ```bash
 # TUI (fastest path, no external deps)
-VIEW_DEMO=1 cargo run -p view-cli
+VIEW_DEMO=1 cargo run -p cli
 
 # Desktop shell
-VIEW_DEMO=1 cargo run -p view-desktop
+VIEW_DEMO=1 cargo run -p desktop
 
 # Live mode (pipe any newline-delimited JSON agent stream)
-cargo run -p view-cli
+cargo run -p cli
 ```
 
 ---
@@ -131,13 +131,13 @@ cargo run -p view-cli
 
 **Run in-place:**
 ```bash
-cargo run -p view-cli
-cargo run -p view-desktop
+cargo run -p cli
+cargo run -p desktop
 ```
 
 **Install locally from source:**
 ```bash
-cargo install --path crates/view-cli
+cargo install --path crates/cli
 ```
 
 No external runtime dependencies are required. Demo mode works fully offline.
@@ -149,7 +149,7 @@ No external runtime dependencies are required. Demo mode works fully offline.
 ### 1. Demo mode
 
 ```bash
-VIEW_DEMO=1 cargo run -p view-cli
+VIEW_DEMO=1 cargo run -p cli
 ```
 
 `VIEW_DEMO` accepts: `1`, `true`, `yes`, `on`, `demo`.
@@ -159,7 +159,7 @@ Demo mode publishes a synthetic swarm with multiple agent roles, projects, statu
 ### 2. Live mode
 
 ```bash
-cargo run -p view-cli
+cargo run -p cli
 ```
 
 In live mode, `view` reads newline-delimited JSON from stdin (or from a configured stream source). Pipe any agent that emits snapshot/event payloads and `view` will render it.
@@ -167,10 +167,10 @@ In live mode, `view` reads newline-delimited JSON from stdin (or from a configur
 ### 3. Desktop shell
 
 ```bash
-VIEW_DEMO=1 cargo run -p view-desktop
+VIEW_DEMO=1 cargo run -p desktop
 ```
 
-The desktop shell shares the same `view-core` backend as the CLI and supports multi-tab terminal sessions, directory/branch pickers, and native text selection.
+The desktop shell shares the same `core` backend as the CLI and supports multi-tab terminal sessions, directory/branch pickers, and native text selection.
 
 ---
 
@@ -342,10 +342,10 @@ visual_interception_event_window/
 ├── AGENTS.md
 ├── Cargo.toml
 ├── crates/
-│   ├── view-core/      — shared runtime, state, engine, listener
-│   ├── view-cli/       — ratatui TUI surface
-│   ├── view-desktop/   — egui native desktop shell
-│   └── view-web/       — axum web API + WebSocket
+│   ├── core/      — shared runtime, state, engine, listener
+│   ├── cli/       — ratatui TUI surface
+│   ├── desktop/   — egui native desktop shell
+│   └── web/       — axum web API + WebSocket
 └── docs/
 ```
 
@@ -363,8 +363,8 @@ cargo check --workspace --all-targets
 For quick UI checks:
 
 ```bash
-VIEW_DEMO=1 cargo run -p view-cli
-VIEW_DEMO=1 cargo run -p view-desktop
+VIEW_DEMO=1 cargo run -p cli
+VIEW_DEMO=1 cargo run -p desktop
 ```
 
 The test suite covers:

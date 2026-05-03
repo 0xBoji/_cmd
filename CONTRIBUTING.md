@@ -4,22 +4,22 @@ Thanks for contributing to VIEW.
 
 ## Workspace layout
 
-- `crates/view-core` contains runtime, mesh ingestion, and shared state
-- `crates/view-cli` contains the ratatui mission-control client
-- `crates/view-desktop` contains the native desktop shell
+- `crates/core` contains runtime, mesh ingestion, and shared state
+- `crates/cli` contains the ratatui mission-control client
+- `crates/desktop` contains the native desktop shell
 
 ## Local development
 
 ### CLI demo mode
 
 ```bash
-VIEW_DEMO=1 cargo run -p view-cli
+VIEW_DEMO=1 cargo run -p cli
 ```
 
 ### Desktop demo mode
 
 ```bash
-VIEW_DEMO=1 cargo run -p view-desktop
+VIEW_DEMO=1 cargo run -p desktop
 ```
 
 ## Verification
@@ -35,7 +35,7 @@ cargo test --workspace
 ## Contribution rules
 
 - Keep diffs small and reversible
-- Prefer extracting shared logic into `view-core`
+- Prefer extracting shared logic into `core`
 - Preserve strict log color mapping for `rai_level`
 - Add or update tests when behavior changes
 - Avoid new dependencies unless they unlock a clear product capability
@@ -44,8 +44,8 @@ cargo test --workspace
 
 VIEW is intentionally split into:
 
-- `view-core` for runtime logic
-- `view-cli` for terminal operation
-- `view-desktop` for the desktop-native experience
+- `core` for runtime logic
+- `cli` for terminal operation
+- `desktop` for the desktop-native experience
 
-Please do not move UI-specific code into `view-core`.
+Please do not move UI-specific code into `core`.

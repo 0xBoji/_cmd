@@ -3,11 +3,11 @@
 //! Handles command submission, git context lines, history lookup, and
 //! directory picker logic. No egui rendering in this module — pure logic.
 
+use core::app::AppState;
+use core::engine::Action;
 use std::path::Path;
 use std::process::Command;
 use tokio::sync::mpsc;
-use view_core::app::AppState;
-use view_core::engine::Action;
 
 // ── Git helpers ────────────────────────────────────────────────────────────────
 
@@ -153,13 +153,14 @@ pub fn submit_shell_command(
 
     state.append_terminal_history(state.ui.selected_terminal_idx, command.clone());
 
+    let cwd = state
+        .selected_terminal()
+        .map(|session| session.cwd.clone())
+        .unwrap_or_default();
+
     if crate::transcript::command_clears_transcript(&command) {
         state.clear_terminal_lines(state.ui.selected_terminal_idx);
     } else {
-        let cwd = state
-            .selected_terminal()
-            .map(|session| session.cwd.clone())
-            .unwrap_or_default();
         let git_details = git_prompt_details(&cwd);
         let context_line = format_command_context_line(
             &cwd,
@@ -174,8 +175,9 @@ pub fn submit_shell_command(
 
     let _ = action_tx.send(Action::SubmitCommand {
         session_id,
-        command,
+        command: command.clone(),
     });
+    let _ = action_tx.send(Action::PersistHistory { command, cwd });
     *history_offset = 0;
     true
 }
@@ -261,20 +263,61 @@ fn cd_directory_suggestion(cwd: &str, input: &str) -> Option<String> {
     Some(format!("cd {first}"))
 }
 
+fn cd_history_target(command: &str) -> Option<&str> {
+    let target = command.strip_prefix("cd ")?;
+    let trimmed = target.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+fn cd_history_suggestion(
+    history: &std::collections::VecDeque<String>,
+    input: &str,
+) -> Option<String> {
+    let prefix = input.strip_prefix("cd ")?;
+    if prefix.is_empty() {
+        return None;
+    }
+
+    let prefix = prefix.trim();
+    history.iter().rev().find_map(|command| {
+        let target = cd_history_target(command)?;
+        let basename_matches = Path::new(target)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(prefix));
+        let path_fragment_matches = target.contains(prefix);
+
+        (basename_matches || path_fragment_matches).then(|| format!("cd {target}"))
+    })
+}
+
 /// Returns the best matching directory/history suggestion for the given input prefix.
 pub fn command_suggestion(
     cwd: &str,
     history: &std::collections::VecDeque<String>,
+    directory_history: &std::collections::VecDeque<String>,
     input: &str,
 ) -> Option<String> {
-    cd_directory_suggestion(cwd, input).or_else(|| {
-        if input.trim().is_empty() {
-            return None;
-        }
-        history
-            .iter()
-            .rev()
-            .find(|cmd| cmd.starts_with(input) && cmd.as_str() != input)
-            .cloned()
-    })
+    let cd_jump = input
+        .strip_prefix("cd ")
+        .and_then(|query| core::history::best_directory_jump_match(directory_history, query))
+        .map(|path| format!("cd {path}"));
+
+    cd_directory_suggestion(cwd, input)
+        .or(cd_jump)
+        .or_else(|| cd_history_suggestion(history, input))
+        .or_else(|| {
+            if input.trim().is_empty() {
+                return None;
+            }
+            history
+                .iter()
+                .rev()
+                .find(|cmd| cmd.starts_with(input) && cmd.as_str() != input)
+                .cloned()
+        })
 }

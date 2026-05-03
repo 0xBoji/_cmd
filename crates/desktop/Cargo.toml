@@ -1,5 +1,5 @@
 [package]
-name = "view-desktop"
+name = "desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,8 +9,8 @@ keywords = ["desktop", "terminal", "agents", "workspace", "observability"]
 categories = ["development-tools", "gui"]
 
 [dependencies]
-view-core = { path = "../view-core" }
-view-web = { path = "../view-web" }
+core = { path = "../core" }
+web = { path = "../web" }
 eframe = { version = "0.33", features = ["__screenshot"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"

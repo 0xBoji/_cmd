@@ -8,6 +8,92 @@
 
 // ── Helpers re-exported for tests ─────────────────────────────────────────────
 
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhysicalRow {
+    pub logical_line_index: usize,
+    pub start_char: usize,
+    pub end_char: usize,
+}
+
+#[cfg(test)]
+fn char_range_slice(line: &str, start_char: usize, end_char: usize) -> String {
+    line.chars()
+        .skip(start_char)
+        .take(end_char.saturating_sub(start_char))
+        .collect()
+}
+
+pub fn wrap_columns_for_width(width: f32, char_width: f32) -> usize {
+    ((width / char_width).floor() as usize).max(1)
+}
+
+pub fn wrapped_row_count(line: &str, cols: usize) -> usize {
+    let char_count = line.chars().count();
+    char_count.max(1).div_ceil(cols.max(1))
+}
+
+#[cfg(test)]
+pub fn build_physical_rows(lines: &[&str], cols: usize) -> Vec<PhysicalRow> {
+    let cols = cols.max(1);
+    let mut rows = Vec::new();
+
+    for (logical_line_index, line) in lines.iter().enumerate() {
+        if line.is_empty() {
+            rows.push(PhysicalRow {
+                logical_line_index,
+                start_char: 0,
+                end_char: 0,
+            });
+            continue;
+        }
+
+        let mut start_char = 0usize;
+        let char_count = line.chars().count();
+        while start_char < char_count {
+            let end_char = (start_char + cols).min(char_count);
+            rows.push(PhysicalRow {
+                logical_line_index,
+                start_char,
+                end_char,
+            });
+            start_char = end_char;
+        }
+    }
+
+    rows
+}
+
+#[cfg(test)]
+pub fn selection_text_from_physical_rows(
+    lines: &[&str],
+    rows: &[PhysicalRow],
+    selected_rows: std::ops::RangeInclusive<usize>,
+) -> String {
+    let mut output = String::new();
+    let mut previous_logical_line = None;
+
+    for row_index in selected_rows {
+        let Some(row) = rows.get(row_index) else {
+            continue;
+        };
+        let Some(line) = lines.get(row.logical_line_index) else {
+            continue;
+        };
+
+        if let Some(previous) = previous_logical_line {
+            if previous != row.logical_line_index {
+                output.push('\n');
+            }
+        }
+
+        output.push_str(&char_range_slice(line, row.start_char, row.end_char));
+        previous_logical_line = Some(row.logical_line_index);
+    }
+
+    output
+}
+
 pub fn command_clears_transcript(command: &str) -> bool {
     matches!(command.trim(), "clear" | "cls")
 }
@@ -62,5 +148,3 @@ pub fn is_legacy_context_block_start(lines: &[&str], index: usize) -> bool {
             .get(index + 2)
             .is_some_and(|next| next.starts_with("$ "))
 }
-
-// Render logic was moved to desktop_app.rs and these functions are dead code.

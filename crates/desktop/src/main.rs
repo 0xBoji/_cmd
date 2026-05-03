@@ -1,4 +1,5 @@
 mod desktop_app;
+mod setup;
 mod shell;
 mod shortcuts;
 mod transcript;
@@ -10,12 +11,26 @@ use std::fs::OpenOptions;
 use std::io::Write;
 
 fn main() -> Result<()> {
+    let args = std::env::args().collect::<Vec<_>>();
+    match setup::parse_command(&args) {
+        setup::SetupCommand::LaunchUi => launch_ui(),
+        setup::SetupCommand::SetupShell => setup::run_setup_shell(),
+        setup::SetupCommand::ResetShell => setup::run_reset_shell(),
+        setup::SetupCommand::PrintShellInit => setup::print_shell_init(),
+    }
+}
+
+fn launch_ui() -> Result<()> {
     main_debug_log("desktop main: starting".to_string());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("VIEW Desktop")
             .with_inner_size([1600.0, 980.0])
-            .with_min_inner_size([960.0, 640.0]),
+            .with_min_inner_size([960.0, 640.0])
+            .with_fullsize_content_view(true)
+            .with_titlebar_shown(false)
+            .with_title_shown(false)
+            .with_transparent(true),
         renderer: Renderer::Glow,
         ..eframe::NativeOptions::default()
     };
