@@ -319,13 +319,32 @@ fn append_preserving_whitespace(
     }
 }
 
+/// Shorten the absolute path at the start of a context line to `../name`.
+/// Input:  `/Volumes/0xboji/learn/rust/coding-agent/visual_interception_event_window git:(main)`
+/// Output: `../visual_interception_event_window git:(main)`
+fn shorten_context_line(line: &str) -> String {
+    let mut parts = line.splitn(2, ' ');
+    let path = match parts.next() {
+        Some(p) if p.starts_with('/') => p,
+        _ => return line.to_string(),
+    };
+    let rest = parts.next();
+    let last = path.split('/').filter(|s| !s.is_empty()).last().unwrap_or(path);
+    let short = format!("../{last}");
+    match rest {
+        Some(r) => format!("{short} {r}"),
+        None => short,
+    }
+}
+
 fn context_line_job(line: &str) -> egui::text::LayoutJob {
+    let shortened = shorten_context_line(line);
     let mut job = egui::text::LayoutJob::default();
     append_preserving_whitespace(
         &mut job,
-        line,
+        &shortened,
         |token| {
-            if token.starts_with('/') {
+            if token.starts_with("../") {
                 PATH_BLUE
             } else if token.starts_with("git:(") {
                 BRANCH_GREEN
