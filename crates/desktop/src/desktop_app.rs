@@ -849,6 +849,7 @@ fn render_terminal_preview(
         .stick_to_bottom(true)
         .show(&mut transcript_ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
 
             egui::Frame::default()
                 .inner_margin(egui::Margin::symmetric(0, 0))
@@ -911,7 +912,7 @@ fn render_terminal_preview(
                                             };
                                             job.wrap.max_width = ui.available_width();
                                             job.wrap.break_anywhere = true;
-                                            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
+                                            ui.label(job);
                                         }
                                     });
 
@@ -938,7 +939,7 @@ fn render_terminal_preview(
                         egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
                             job.wrap.max_width = ui.available_width();
                             job.wrap.break_anywhere = true;
-                            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
+                            ui.label(job);
                         });
                         previous_block_had_error = false;
                         line_index += 1;
@@ -1145,6 +1146,7 @@ fn render_focus_terminal(
             .stick_to_bottom(true)
             .show(&mut transcript_ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
 
                 egui::Frame::default()
                     .inner_margin(egui::Margin::symmetric(0, 0))
@@ -1261,7 +1263,7 @@ fn render_focus_terminal(
                                         );
                                         job.wrap.max_width = ui.available_width();
                                         job.wrap.break_anywhere = true;
-                                        let response = ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
+                                        let response = ui.label(job);
                                         if terminal_find_active_result
                                             .and_then(|result_index| search_results.get(result_index))
                                             .is_some_and(|result| result.line_index == absolute_line_index)
@@ -1315,7 +1317,7 @@ fn render_focus_terminal(
                             egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
                                 job.wrap.max_width = ui.available_width();
                                 job.wrap.break_anywhere = true;
-                                let response = ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
+                                let response = ui.label(job);
                                 if terminal_find_active_result
                                     .and_then(|result_index| search_results.get(result_index))
                                     .is_some_and(|result| result.line_index == index)
