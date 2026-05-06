@@ -1038,12 +1038,12 @@ fn render_terminal_preview(
         |ui| {
         let available_w = ui.available_width();
         // font-11 monospace ≈ 7px/char; subtract 14px left-pad + 16px icon + 4px buffer
-        let path_max_chars = ((available_w - 34.0) / 7.0).floor().max(4.0) as usize;
+        let path_max_chars = ((available_w - 22.0) / 7.0).floor().max(4.0) as usize;
         let show_branch = available_w > 180.0;
 
         ui.add_space(14.0);
         let short_cwd = truncate_path(&session.cwd, path_max_chars);
-        let directory_button = terminal_directory_button(format!("⊡ {}", short_cwd));
+        let directory_button = terminal_directory_button(short_cwd);
         ui.add(directory_button);
 
         if show_branch {
@@ -1624,12 +1624,12 @@ fn render_focus_terminal(
                 .layout(Layout::left_to_right(Align::Center)),
             |ui| {
             let available_w = ui.available_width();
-            let path_max_chars = ((available_w - 34.0) / 7.0).floor().max(4.0) as usize;
+            let path_max_chars = ((available_w - 22.0) / 7.0).floor().max(4.0) as usize;
             let show_branch = available_w > 180.0;
 
             ui.add_space(14.0);
             let short_cwd = truncate_path(&session.cwd, path_max_chars);
-            let directory_button = terminal_directory_button(format!("⊡ {}", short_cwd));
+            let directory_button = terminal_directory_button(short_cwd);
             let directory_response = ui.add(directory_button);
             directory_button_rect = Some(directory_response.rect);
             directory_button_hovered = directory_response.hovered();
