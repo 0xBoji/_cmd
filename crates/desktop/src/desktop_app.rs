@@ -851,9 +851,9 @@ fn render_terminal_preview(
             ui.spacing_mut().item_spacing.y = 0.0;
 
             egui::Frame::default()
-                .inner_margin(egui::Margin::symmetric(14, 0))
+                .inner_margin(egui::Margin::symmetric(0, 0))
                 .show(ui, |ui| {
-                    let wrap_cols = wrap_columns_for_width(ui.available_width().max(1.0), 8.4);
+                    let wrap_cols = wrap_columns_for_width((ui.available_width() - 28.0).max(1.0), 8.4);
                     let num_lines = recent_lines
                         .iter()
                         .map(|line| crate::transcript::wrapped_row_count(line, wrap_cols))
@@ -890,15 +890,15 @@ fn render_terminal_preview(
                                     .stroke(Stroke::NONE)
                                     .corner_radius(0.0)
                                     .inner_margin(egui::Margin {
-                                        left: 0,
-                                        right: 0,
+                                        left: 14,
+                                        right: 14,
                                         top: block_padding_y,
                                         bottom: block_padding_y,
                                     })
                                     .show(ui, |ui| {
                                         ui.set_min_width(block_width);
                                         for block_line in &recent_lines[block.start..block.end] {
-                                            let job = if is_command_context_line(block_line) {
+                                            let mut job = if is_command_context_line(block_line) {
                                                 context_line_job(block_line)
                                             } else if block_line.starts_with("$ ") {
                                                 command_line_job(block_line, block.has_error)
@@ -909,6 +909,8 @@ fn render_terminal_preview(
                                             } else {
                                                 output_line_job(block_line, &session.cwd)
                                             };
+                                            job.wrap.max_width = ui.available_width();
+                                            job.wrap.break_anywhere = true;
                                             ui.label(job);
                                         }
                                     });
@@ -926,14 +928,18 @@ fn render_terminal_preview(
                         }
 
                         let line = recent_lines[line_index];
-                        let job = if line.starts_with("~ (") {
+                        let mut job = if line.starts_with("~ (") {
                             let mut job = egui::text::LayoutJob::default();
                             append_token(&mut job, line, FG_MUTED, false);
                             job
                         } else {
                             output_line_job(line, &session.cwd)
                         };
-                        ui.label(job);
+                        egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
+                            job.wrap.max_width = ui.available_width();
+                            job.wrap.break_anywhere = true;
+                            ui.label(job);
+                        });
                         previous_block_had_error = false;
                         line_index += 1;
                     }
@@ -1141,9 +1147,9 @@ fn render_focus_terminal(
                 ui.spacing_mut().item_spacing.y = 0.0;
 
                 egui::Frame::default()
-                    .inner_margin(egui::Margin::symmetric(14, 0))
+                    .inner_margin(egui::Margin::symmetric(0, 0))
                     .show(ui, |ui| {
-                        let wrap_cols = wrap_columns_for_width(ui.available_width().max(1.0), 8.4);
+                        let wrap_cols = wrap_columns_for_width((ui.available_width() - 28.0).max(1.0), 8.4);
                         let num_lines = lines
                             .iter()
                             .map(|line| crate::transcript::wrapped_row_count(line, wrap_cols))
@@ -1206,8 +1212,8 @@ fn render_focus_terminal(
                                 };
                                 let block_padding_y = if has_error { 16 } else { 8 };
                                 let block_margin = egui::Margin {
-                                    left: 0, // Frame already handles horizontal margin
-                                    right: 0,
+                                    left: 14,
+                                    right: 14,
                                     top: block_padding_y,
                                     bottom: block_padding_y,
                                 };
@@ -1253,6 +1259,8 @@ fn render_focus_terminal(
                                             &line_highlights,
                                             active_highlight,
                                         );
+                                        job.wrap.max_width = ui.available_width();
+                                        job.wrap.break_anywhere = true;
                                         let response = ui.label(job);
                                         if terminal_find_active_result
                                             .and_then(|result_index| search_results.get(result_index))
@@ -1304,13 +1312,17 @@ fn render_focus_terminal(
                                 .filter(|result| result.line_index == index)
                                 .map(|result| result.range.clone());
                             apply_match_highlights(&mut job, &line_highlights, active_highlight);
-                            let response = ui.label(job);
-                            if terminal_find_active_result
-                                .and_then(|result_index| search_results.get(result_index))
-                                .is_some_and(|result| result.line_index == index)
-                            {
-                                response.scroll_to_me(Some(egui::Align::Center));
-                            }
+                            egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
+                                job.wrap.max_width = ui.available_width();
+                                job.wrap.break_anywhere = true;
+                                let response = ui.label(job);
+                                if terminal_find_active_result
+                                    .and_then(|result_index| search_results.get(result_index))
+                                    .is_some_and(|result| result.line_index == index)
+                                {
+                                    response.scroll_to_me(Some(egui::Align::Center));
+                                }
+                            });
                             previous_block_had_error = false;
                             previous_block_selected = false;
                             index += 1;
