@@ -911,7 +911,7 @@ fn render_terminal_preview(
                                             };
                                             job.wrap.max_width = ui.available_width();
                                             job.wrap.break_anywhere = true;
-                                            ui.label(job);
+                                            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
                                         }
                                     });
 
@@ -938,7 +938,7 @@ fn render_terminal_preview(
                         egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
                             job.wrap.max_width = ui.available_width();
                             job.wrap.break_anywhere = true;
-                            ui.label(job);
+                            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
                         });
                         previous_block_had_error = false;
                         line_index += 1;
@@ -1261,7 +1261,7 @@ fn render_focus_terminal(
                                         );
                                         job.wrap.max_width = ui.available_width();
                                         job.wrap.break_anywhere = true;
-                                        let response = ui.label(job);
+                                        let response = ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
                                         if terminal_find_active_result
                                             .and_then(|result_index| search_results.get(result_index))
                                             .is_some_and(|result| result.line_index == absolute_line_index)
@@ -1315,7 +1315,7 @@ fn render_focus_terminal(
                             egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
                                 job.wrap.max_width = ui.available_width();
                                 job.wrap.break_anywhere = true;
-                                let response = ui.label(job);
+                                let response = ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
                                 if terminal_find_active_result
                                     .and_then(|result_index| search_results.get(result_index))
                                     .is_some_and(|result| result.line_index == index)
