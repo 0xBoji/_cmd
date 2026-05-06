@@ -481,7 +481,38 @@ impl eframe::App for CmdDesktopApp {
         }
 
         let mut state = self.state.write();
+        let session_count_before = state.terminal_sessions().len();
         shortcuts::handle(ctx, &mut state);
+        let session_count_after = state.terminal_sessions().len();
+
+        // If Cmd+T / Cmd+Shift+T added new sessions, spawn shell processes for them.
+        if session_count_after > session_count_before {
+            // Use the active session's CWD so new panes inherit the current directory.
+            let cwd = state
+                .selected_terminal()
+                .and_then(|s| {
+                    if s.cwd.is_empty() {
+                        None
+                    } else {
+                        Some(PathBuf::from(&s.cwd))
+                    }
+                })
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")));
+
+            for new_id in session_count_before..session_count_after {
+                let _ = self.action_tx.send(Action::SpawnTerminal {
+                    cwd: cwd.clone(),
+                });
+                // Also resize the new session immediately
+                if let Some(size) = self.last_observed_terminal_size {
+                    let _ = self.action_tx.send(Action::ResizeTerminal {
+                        session_id: new_id,
+                        size,
+                    });
+                }
+            }
+        }
+
         let terminal_size = terminal_size_for_content_rect(ctx.content_rect());
         if self.last_observed_terminal_size != Some(terminal_size) {
             self.last_observed_terminal_size = Some(terminal_size);
