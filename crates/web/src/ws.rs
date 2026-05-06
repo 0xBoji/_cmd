@@ -1,4 +1,4 @@
-//! WebSocket handler for VIEW web server.
+//! WebSocket handler for _CMD web server.
 //!
 //! On connect: sends an immediate full `WebSnapshot` as JSON, then pushes
 //! a fresh snapshot every 500 ms until the client disconnects.

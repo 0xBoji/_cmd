@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const HISTORY_DIR: &str = ".view";
+const HISTORY_DIR: &str = "._cmd";
 const HISTORY_FILE: &str = "shell-history.jsonl";
 const RAW_HISTORY_LIMIT: usize = 2_000;
 

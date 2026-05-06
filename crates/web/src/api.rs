@@ -1,4 +1,4 @@
-//! REST API handlers for VIEW web server.
+//! REST API handlers for _CMD web server.
 
 use axum::{
     extract::State,
@@ -14,7 +14,7 @@ pub async fn root_info() -> Json<Value> {
     Json(json!({
         "service": "web",
         "version": env!("CARGO_PKG_VERSION"),
-        "description": "VIEW LAN remote access server",
+        "description": "_CMD LAN remote access server",
         "endpoints": {
             "agents":   "/api/agents",
             "events":   "/api/events",

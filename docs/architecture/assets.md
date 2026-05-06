@@ -1,6 +1,6 @@
 # Assets Architecture
 
-`view` should stay easy to run from source and easy to distribute as a compact
+`_cmd` should stay easy to run from source and easy to distribute as a compact
 binary. Asset handling should therefore be added only when a surface has a real
 asset dependency.
 

@@ -1,6 +1,6 @@
-# `view` Architecture
+# `_cmd` Architecture
 
-`view` is a passive observability surface for local AI coding agents. Its core
+`_cmd` is a passive observability surface for local AI coding agents. Its core
 job is to ingest structured events, maintain shared state, and render that state
 through terminal, desktop, and web surfaces without interfering with observed
 processes.

@@ -1,21 +1,21 @@
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/9976b2da-2edd-4604-a36c-8fd53719c6d4" width="800" alt="view logo" />
-  <h1>view</h1>
+  <img src="https://github.com/user-attachments/assets/9976b2da-2edd-4604-a36c-8fd53719c6d4" width="800" alt="_cmd logo" />
+  <h1>_cmd</h1>
   <p><em>The operator's glass cockpit for local AI coding agent swarms.</em></p>
 </div>
 
 <p align="center">
-  <a href="https://github.com/0xBoji/visual_interception_event_window/stargazers"><img src="https://img.shields.io/github/stars/0xBoji/visual_interception_event_window?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/0xBoji/_cmd/stargazers"><img src="https://img.shields.io/github/stars/0xBoji/_cmd?style=flat-square" alt="Stars"></a>
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
   <a href="https://rust-lang.org"><img src="https://img.shields.io/badge/rust-stable-orange.svg?style=flat-square" alt="Rust"></a>
-  <a href="https://github.com/0xBoji/visual_interception_event_window/actions"><img src="https://img.shields.io/github/check-runs/0xBoji/visual_interception_event_window/main?style=flat-square" alt="Build Status"></a>
+  <a href="https://github.com/0xBoji/_cmd/actions"><img src="https://img.shields.io/github/check-runs/0xBoji/_cmd/main?style=flat-square" alt="Build Status"></a>
 </p>
 
 ---
 
-> `view` (Visual Interception Event Window) is a passive, real-time observability surface for monitoring local AI coding agents. It subscribes to live JSON event streams and transforms them into a premium, multi-panel TUI and desktop dashboard—allowing you to inspect what your agents are doing, where they are stuck, and how they are spending tokens, without ever interfering with their execution.
+> `_cmd` is a **Command Center for AI Agents** — a passive, real-time observability surface for monitoring local AI coding swarms. It subscribes to live JSON event streams and transforms them into a premium, multi-panel TUI and desktop dashboard—allowing you to inspect what your agents are doing, where they are stuck, and how they are spending tokens, without ever interfering with their execution.
 
-## 🔭 Why View?
+## 🔭 Why _cmd?
 
 Once you start running multiple agents, the bottleneck shifts from **execution** to **visibility**. 
 
@@ -23,7 +23,7 @@ Once you start running multiple agents, the bottleneck shifts from **execution**
 *   **Guesswork**: You know agents are running, but are they healthy or just "stalled"?
 *   **Information Overload**: Raw JSON is great for machines, but terrible for human split-second decisions.
 
-`view` solves this by providing a dedicated, high-performance cockpit that is **passive** (never mutates state), **real-time** (60fps rendering), and **high-density** (sparklines, cards, and feeds in one view).
+`_cmd` solves this by providing a dedicated, high-performance cockpit that is **passive** (never mutates state), **real-time** (60fps rendering), and **high-density** (sparklines, cards, and feeds in one _cmd).
 
 ## ✨ Features
 
@@ -38,7 +38,7 @@ Once you start running multiple agents, the bottleneck shifts from **execution**
 ## 🏁 Quick Start
 
 ### 1. The Demo (Rehearsal Mode)
-The fastest way to see `view` in action without any live agents:
+The fastest way to see `_cmd` in action without any live agents:
 
 ```bash
 # Start the TUI Dashboard
@@ -70,7 +70,7 @@ tail -f agent_events.json | cargo run -p cli
 
 ## 🏗️ Repository Architecture
 
-`view` is built with a strictly decoupled architecture, ensuring the core engine remains UI-agnostic.
+`_cmd` is built with a strictly decoupled architecture, ensuring the core engine remains UI-agnostic.
 
 ```bash
 crates/
@@ -90,7 +90,7 @@ crates/
 
 ## 📡 Event Contract
 
-`view` consumes two main types of JSON payloads. If you want your agent to be "visible", just emit these to stdout or a socket:
+`_cmd` consumes two main types of JSON payloads. If you want your agent to be "visible", just emit these to stdout or a socket:
 
 <details>
 <summary><b>Snapshot Payload</b> (Seeds the roster)</summary>
@@ -103,7 +103,7 @@ crates/
       "id": "agent-01",
       "instance_name": "executor-alpha",
       "role": "executor",
-      "project": "view-dashboard",
+      "project": "_cmd-dashboard",
       "branch": "main",
       "status": "busy",
       "metadata": { "tokens": "24500", "rai_level": "info" }
@@ -136,7 +136,7 @@ crates/
 - [ ] Pluggable event adapters (Socket, Tail, HTTP)
 - [ ] Persistent event history export
 - [ ] Project-level aggregate analytics
-- [ ] Global CLI publish as `view`
+- [ ] Global CLI publish as `_cmd`
 
 ## 📄 License
 

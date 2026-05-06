@@ -1,6 +1,6 @@
 # Architecture Roadmap
 
-This roadmap borrows from Kaku where it serves `view`, but keeps the passive
+This roadmap borrows from Kaku where it serves `_cmd`, but keeps the passive
 agent-dashboard mission as the filter.
 
 ## Current Foundation

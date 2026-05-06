@@ -29,79 +29,14 @@ use crate::{
     },
 };
 
-const BG_APP: Color32 = Color32::from_rgb(10, 11, 14);
-const BG_PANEL: Color32 = Color32::from_rgb(7, 8, 12);
-const BG_PANEL_ALT: Color32 = Color32::from_rgb(17, 19, 26);
-const FG_PRIMARY: Color32 = Color32::from_rgb(234, 238, 255);
-const FG_MUTED: Color32 = Color32::from_rgb(145, 154, 188);
-const ACCENT: Color32 = Color32::from_rgb(108, 92, 231);
-const ACCENT_ALT: Color32 = Color32::from_rgb(76, 201, 240);
-const PICKER_HOVER: Color32 = Color32::from_rgb(46, 167, 208);
-const BRANCH_GREEN: Color32 = Color32::from_rgb(198, 242, 158);
-const BRANCH_GREEN_BORDER: Color32 = Color32::from_rgb(106, 153, 78);
-const ERROR_PANEL_BG: Color32 = Color32::from_rgb(96, 40, 40);
-const ERROR_TEXT: Color32 = Color32::from_rgb(255, 228, 228);
-const ERROR_COMMAND_TEXT: Color32 = Color32::from_rgb(255, 132, 116);
-const SEARCH_HIGHLIGHT_BG: Color32 = Color32::from_rgb(255, 215, 64);
-const SEARCH_ACTIVE_HIGHLIGHT_BG: Color32 = Color32::from_rgb(255, 235, 120);
-const SEARCH_HIGHLIGHT_TEXT: Color32 = Color32::from_rgb(16, 18, 24);
-const PATH_BLUE: Color32 = Color32::from_rgb(157, 175, 235);
-const COMMAND_CYAN: Color32 = Color32::from_rgb(104, 214, 255);
-const DIRECTORY_PURPLE: Color32 = Color32::from_rgb(176, 162, 255);
-const POSITIVE_GREEN: Color32 = Color32::from_rgb(114, 229, 121);
-const NEGATIVE_RED: Color32 = Color32::from_rgb(255, 132, 116);
-const BLOCK_GAP_PAD_Y: f32 = 8.0;
-const SELECTED_PANEL_BG: Color32 = Color32::from_rgb(30, 41, 59);
-const TITLEBAR_BG: Color32 = Color32::from_rgb(24, 24, 26);
-const SETTINGS_BG: Color32 = Color32::from_rgb(26, 26, 28);
-const SETTINGS_SIDEBAR_BG: Color32 = Color32::from_rgb(30, 30, 33);
-const SETTINGS_CONTENT_BG: Color32 = Color32::from_rgb(24, 24, 27);
-const SETTINGS_SELECTED_ROW_BG: Color32 = Color32::from_rgb(74, 74, 78);
-const SETTINGS_HOVER_ROW_BG: Color32 = Color32::from_rgb(54, 54, 58);
-const SETTINGS_CARD_BG: Color32 = Color32::from_rgb(40, 40, 44);
-const SETTINGS_BORDER: Color32 = Color32::from_rgb(88, 88, 94);
-const SETTINGS_TEXT_PRIMARY: Color32 = Color32::from_rgb(248, 248, 250);
-const SETTINGS_TEXT_SECONDARY: Color32 = Color32::from_rgb(196, 196, 202);
-const TERMINAL_TRANSCRIPT_MIN_HEIGHT: f32 = 180.0;
-const TERMINAL_FOOTER_RESERVED_HEIGHT: f32 = 126.0;
-const TERMINAL_INPUT_HEIGHT: f32 = 44.0;
-const TERMINAL_FOOTER_PATH_MAX_CHARS: usize = 40;
-const TERMINAL_FOOTER_TOP_GAP: f32 = 14.0;
-const TERMINAL_FOOTER_ROW_GAP: f32 = 10.0;
+use crate::theme::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct TerminalFooterMetrics {
-    transcript_height: f32,
-    input_height: f32,
-}
+use crate::utils::layout::*;
+use crate::utils::search::*;
+use crate::panels::settings::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct TerminalPaneSections {
-    transcript_rect: egui::Rect,
-    footer_rect: egui::Rect,
-}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct TerminalFooterLayout {
-    chips_rect: egui::Rect,
-    input_rect: egui::Rect,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct TranscriptBlock {
-    start: usize,
-    end: usize,
-    has_error: bool,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SettingsSection {
-    Shell,
-    Network,
-    Shortcuts,
-}
-
-pub struct ViewDesktopApp {
+pub struct CmdDesktopApp {
     state: Arc<RwLock<AppState>>,
     shell_input: String,
     history_offset: usize,
@@ -128,7 +63,7 @@ pub struct ViewDesktopApp {
     last_observed_terminal_size: Option<TerminalSize>,
 }
 
-impl ViewDesktopApp {
+impl CmdDesktopApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         debug_log("desktop app: new()".to_string());
         configure_theme(&cc.egui_ctx);
@@ -201,315 +136,17 @@ fn history_entry_for_offset(
     shell::history_entry_for_offset(history, history_offset)
 }
 
-fn draw_divider(ui: &mut egui::Ui, color: Color32) {
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().hline(
-        ui.clip_rect().x_range(),
-        rect.center().y,
-        Stroke::new(1.0, color),
-    );
-}
 
-fn show_button_tooltip(ctx: &egui::Context, id: &'static str, rect: egui::Rect, text: &str) {
-    let pos = egui::pos2(rect.min.x, rect.min.y - 40.0);
-    egui::Area::new(egui::Id::new(id))
-        .order(egui::Order::Foreground)
-        .fixed_pos(pos)
-        .show(ctx, |ui| {
-            Frame::new()
-                .fill(Color32::from_gray(185))
-                .stroke(Stroke::new(1.0, Color32::from_gray(195)))
-                .corner_radius(6.0)
-                .inner_margin(egui::Margin::symmetric(10, 6))
-                .show(ui, |ui| {
-                    ui.label(RichText::new(text).color(BG_APP).size(11.5));
-                });
-        });
-}
 
-fn render_copied_badge(ctx: &egui::Context) {
-    egui::Area::new(egui::Id::new("copied_badge"))
-        .order(egui::Order::Foreground)
-        .anchor(egui::Align2::RIGHT_BOTTOM, [-18.0, -18.0])
-        .show(ctx, |ui| {
-            Frame::new()
-                .fill(Color32::from_rgb(146, 102, 245))
-                .stroke(Stroke::NONE)
-                .corner_radius(6.0)
-                .inner_margin(egui::Margin::symmetric(12, 8))
-                .show(ui, |ui| {
-                    ui.label(
-                        RichText::new("Copied")
-                            .color(Color32::from_rgb(244, 238, 255))
-                            .size(13.0)
-                            .monospace(),
-                    );
-                });
-        });
-}
+use crate::components::buttons::*;
+use crate::components::badges::*;
+use crate::components::dividers::*;
+use crate::components::tooltips::*;
 
-fn titlebar_icon_button(ui: &mut egui::Ui, label: &str, active: bool) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::click());
-    if response.hovered() || active {
-        ui.painter().rect_filled(
-            rect,
-            8.0,
-            if active {
-                Color32::from_rgb(52, 52, 56)
-            } else {
-                Color32::from_rgb(38, 38, 42)
-            },
-        );
-    }
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        label,
-        egui::FontId::monospace(15.0),
-        if active { FG_PRIMARY } else { FG_MUTED },
-    );
-    response
-}
 
-fn settings_sidebar_row(
-    ui: &mut egui::Ui,
-    label: &str,
-    icon: &str,
-    selected: bool,
-) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(196.0, 38.0), egui::Sense::click());
-    if response.hovered() || selected {
-        ui.painter().rect_filled(
-            rect,
-            10.0,
-            if selected {
-                SETTINGS_SELECTED_ROW_BG
-            } else {
-                SETTINGS_HOVER_ROW_BG
-            },
-        );
-    }
-    ui.painter().text(
-        egui::pos2(rect.min.x + 14.0, rect.center().y),
-        egui::Align2::LEFT_CENTER,
-        format!("{icon}  {label}"),
-        egui::FontId::proportional(13.5),
-        if selected {
-            SETTINGS_TEXT_PRIMARY
-        } else {
-            SETTINGS_TEXT_SECONDARY
-        },
-    );
-    response
-}
 
-fn render_shell_settings_panel(
-    ui: &mut egui::Ui,
-    shell_setup_show_preview: &mut bool,
-    shell_setup_status_message: &mut Option<(String, bool)>,
-) {
-    ui.label(
-        RichText::new("Shell")
-            .color(SETTINGS_TEXT_PRIMARY)
-            .size(20.0)
-            .strong(),
-    );
-    ui.add_space(6.0);
-    ui.label(
-        RichText::new("Manage the generated zsh integration used by VIEW.")
-            .color(SETTINGS_TEXT_SECONDARY)
-            .size(14.0),
-    );
-    ui.add_space(18.0);
 
-    match setup::inspect_shell_setup() {
-        Ok(status) => {
-            Frame::new()
-                .fill(SETTINGS_CARD_BG)
-                .stroke(Stroke::new(1.0, SETTINGS_BORDER))
-                .corner_radius(12.0)
-                .inner_margin(egui::Margin::symmetric(18, 16))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new("Managed zsh integration")
-                                .color(SETTINGS_TEXT_PRIMARY)
-                                .size(15.0)
-                                .strong(),
-                        );
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.label(
-                                RichText::new(if status.zshrc_patched {
-                                    "Installed"
-                                } else {
-                                    "Not installed"
-                                })
-                                .color(if status.zshrc_patched {
-                                    POSITIVE_GREEN
-                                } else {
-                                    FG_MUTED
-                                })
-                                .monospace(),
-                            );
-                        });
-                    });
-                    ui.add_space(10.0);
-                    ui.add(egui::Label::new(
-                        RichText::new(format!("Managed file: {}", status.managed_path.display()))
-                            .color(SETTINGS_TEXT_SECONDARY)
-                            .size(12.5)
-                            .monospace()
-                    ).truncate());
-                    ui.label(
-                        RichText::new(format!(
-                            "Managed file status: {}",
-                            if status.managed_file_exists {
-                                "present"
-                            } else {
-                                "missing"
-                            }
-                        ))
-                        .color(if status.managed_file_exists {
-                            POSITIVE_GREEN
-                        } else {
-                            FG_MUTED
-                        })
-                        .size(12.5)
-                        .monospace(),
-                    );
-                    ui.add(egui::Label::new(
-                        RichText::new(format!("Shell rc: {}", status.zshrc_path.display()))
-                            .color(SETTINGS_TEXT_SECONDARY)
-                            .size(12.5)
-                            .monospace()
-                    ).truncate());
-                    ui.add_space(12.0);
-                    ui.horizontal(|ui| {
-                        if ui.button("Install").clicked() {
-                            match setup::run_setup_shell() {
-                                Ok(()) => {
-                                    *shell_setup_status_message = Some((
-                                        "Managed zsh integration installed.".to_string(),
-                                        false,
-                                    ));
-                                }
-                                Err(error) => {
-                                    *shell_setup_status_message =
-                                        Some((format!("Install failed: {error}"), true));
-                                }
-                            }
-                        }
-                        if ui.button("Preview").clicked() {
-                            *shell_setup_show_preview = !*shell_setup_show_preview;
-                        }
-                        if ui.button("Reset").clicked() {
-                            match setup::run_reset_shell() {
-                                Ok(()) => {
-                                    *shell_setup_status_message = Some((
-                                        "Managed zsh integration removed.".to_string(),
-                                        false,
-                                    ));
-                                }
-                                Err(error) => {
-                                    *shell_setup_status_message =
-                                        Some((format!("Reset failed: {error}"), true));
-                                }
-                            }
-                        }
-                    });
-                });
-        }
-        Err(error) => {
-            ui.label(
-                RichText::new(format!("Status unavailable: {error}"))
-                    .color(ERROR_COMMAND_TEXT)
-                    .monospace(),
-            );
-        }
-    }
 
-    if let Some((message, is_error)) = shell_setup_status_message.as_ref() {
-        ui.add_space(14.0);
-        ui.label(
-            RichText::new(message)
-                .color(if *is_error {
-                    ERROR_COMMAND_TEXT
-                } else {
-                    POSITIVE_GREEN
-                })
-                .size(12.5)
-                .monospace(),
-        );
-    }
-
-    if *shell_setup_show_preview {
-        ui.add_space(18.0);
-        Frame::new()
-            .fill(SETTINGS_CARD_BG)
-            .stroke(Stroke::new(1.0, SETTINGS_BORDER))
-            .corner_radius(12.0)
-            .inner_margin(egui::Margin::symmetric(14, 14))
-            .show(ui, |ui| {
-                ui.label(
-                    RichText::new("Managed block preview")
-                        .color(SETTINGS_TEXT_PRIMARY)
-                        .size(14.0)
-                        .strong(),
-                );
-                ui.add_space(8.0);
-                let mut preview = setup::preview_shell_init()
-                    .unwrap_or_else(|error| format!("Failed to render preview: {error}"));
-                ui.add(
-                    egui::TextEdit::multiline(&mut preview)
-                        .font(egui::TextStyle::Monospace)
-                        .desired_rows(8)
-                        .interactive(false),
-                );
-            });
-    }
-}
-
-fn draw_branch_icon(painter: &egui::Painter, left: f32, center_y: f32, color: Color32) {
-    let stroke = Stroke::new(1.4, color);
-    let top = egui::pos2(left + 3.0, center_y - 5.0);
-    let mid = egui::pos2(left + 3.0, center_y + 0.5);
-    let right = egui::pos2(left + 8.5, center_y - 1.5);
-    let bottom = egui::pos2(left + 3.0, center_y + 5.0);
-
-    painter.line_segment([top, mid], stroke);
-    painter.line_segment([mid, right], stroke);
-    painter.line_segment([mid, bottom], stroke);
-    painter.circle_stroke(top, 1.9, stroke);
-    painter.circle_stroke(right, 1.9, stroke);
-    painter.circle_stroke(bottom, 1.9, stroke);
-}
-
-fn terminal_directory_button(label: String) -> egui::Button<'static> {
-    egui::Button::new(
-        RichText::new(label)
-            .color(FG_PRIMARY)
-            .size(13.0)
-            .monospace(),
-    )
-    .stroke(Stroke::new(1.0, Color32::from_gray(60)))
-    .corner_radius(6.0)
-    .fill(BG_PANEL_ALT)
-    .min_size(egui::vec2(0.0, 28.0))
-}
-
-fn terminal_branch_button(label: String) -> egui::Button<'static> {
-    egui::Button::new(
-        RichText::new(label)
-            .color(BRANCH_GREEN)
-            .size(13.0)
-            .monospace(),
-    )
-    .stroke(Stroke::new(1.0, BRANCH_GREEN_BORDER))
-    .corner_radius(6.0)
-    .fill(BG_PANEL)
-    .min_size(egui::vec2(0.0, 26.0))
-}
 
 fn picker_height(option_count: usize, row_height: f32, max_visible_rows: usize) -> f32 {
     let visible_rows = option_count.max(1).min(max_visible_rows) as f32;
@@ -552,105 +189,7 @@ fn transcript_block_fill_color(has_error: bool, is_selected: bool) -> Color32 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TranscriptSearchMatch {
-    block_index: Option<usize>,
-    line_index: usize,
-    range: std::ops::Range<usize>,
-}
 
-fn find_match_ranges(line: &str, query: &str, case_sensitive: bool) -> Vec<std::ops::Range<usize>> {
-    if query.is_empty() {
-        return Vec::new();
-    }
-
-    if case_sensitive {
-        return line
-            .match_indices(query)
-            .map(|(start, matched)| start..start + matched.len())
-            .collect();
-    }
-
-    let lowercase_line = line.to_lowercase();
-    let lowercase_query = query.to_lowercase();
-    lowercase_line
-        .match_indices(&lowercase_query)
-        .map(|(start, _)| start..start + lowercase_query.len())
-        .collect()
-}
-
-fn transcript_line_block_indexes(lines: &[&str]) -> Vec<Option<usize>> {
-    let mut indexes = vec![None; lines.len()];
-    let mut index = 0usize;
-    let mut block_index = 0usize;
-    while index < lines.len() {
-        let line = lines[index];
-        let has_context_line = is_context_block_start(lines, index);
-        if has_context_line || line.starts_with("$ ") {
-            let prompt_index = if has_context_line { index + 1 } else { index };
-            let mut block_end = prompt_index + 1;
-            while block_end < lines.len()
-                && !lines[block_end].starts_with("$ ")
-                && !is_context_block_start(lines, block_end)
-                && !is_legacy_context_block_start(lines, block_end)
-            {
-                block_end += 1;
-            }
-            for slot in &mut indexes[index..block_end] {
-                *slot = Some(block_index);
-            }
-            block_index += 1;
-            index = block_end;
-            while index < lines.len() && lines[index].trim().is_empty() {
-                index += 1;
-            }
-            continue;
-        }
-
-        index += 1;
-    }
-
-    indexes
-}
-
-fn transcript_search_matches(
-    lines: &[&str],
-    selected_blocks: &BTreeSet<usize>,
-    query: &str,
-    case_sensitive: bool,
-) -> Vec<TranscriptSearchMatch> {
-    let block_indexes = transcript_line_block_indexes(lines);
-    lines
-        .iter()
-        .enumerate()
-        .filter(|(line_index, _)| {
-            selected_blocks.is_empty()
-                || block_indexes[*line_index]
-                    .is_some_and(|block_index| selected_blocks.contains(&block_index))
-        })
-        .flat_map(|(line_index, line)| {
-            let block_index = block_indexes[line_index];
-            find_match_ranges(line, query, case_sensitive)
-                .into_iter()
-                .map(move |range| TranscriptSearchMatch {
-                    block_index,
-                    line_index,
-                    range,
-                })
-        })
-        .collect()
-}
-
-fn selected_search_scope(
-    selected_blocks: &BTreeSet<usize>,
-    selected_only: bool,
-) -> BTreeSet<usize> {
-    if selected_only {
-        selected_blocks.clone()
-    } else {
-        BTreeSet::new()
-    }
-}
 
 fn shell_input_should_submit(
     directory_picker_open: bool,
@@ -665,91 +204,7 @@ fn shell_input_should_submit(
         && (input_has_focus || input_lost_focus)
 }
 
-fn terminal_footer_metrics(available_height: f32) -> TerminalFooterMetrics {
-    TerminalFooterMetrics {
-        transcript_height: (available_height - TERMINAL_FOOTER_RESERVED_HEIGHT)
-            .max(TERMINAL_TRANSCRIPT_MIN_HEIGHT),
-        input_height: TERMINAL_INPUT_HEIGHT,
-    }
-}
 
-fn terminal_pane_sections(rect: egui::Rect) -> TerminalPaneSections {
-    let footer_height = (rect.height() - terminal_footer_metrics(rect.height()).transcript_height)
-        .max(TERMINAL_FOOTER_RESERVED_HEIGHT);
-    let footer_min_y = (rect.max.y - footer_height).max(rect.min.y);
-
-    TerminalPaneSections {
-        transcript_rect: egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, footer_min_y)),
-        footer_rect: egui::Rect::from_min_max(egui::pos2(rect.min.x, footer_min_y), rect.max),
-    }
-}
-
-fn terminal_footer_layout(rect: egui::Rect) -> TerminalFooterLayout {
-    let chips_height = 28.0;
-    let chips_top = rect.min.y + TERMINAL_FOOTER_TOP_GAP;
-    let input_top = chips_top + chips_height + TERMINAL_FOOTER_ROW_GAP;
-
-    TerminalFooterLayout {
-        chips_rect: egui::Rect::from_min_size(
-            egui::pos2(rect.min.x, chips_top),
-            egui::vec2(rect.width(), chips_height),
-        ),
-        input_rect: egui::Rect::from_min_size(
-            egui::pos2(rect.min.x, input_top),
-            egui::vec2(rect.width(), TERMINAL_INPUT_HEIGHT),
-        ),
-    }
-}
-
-fn terminal_transcript_blocks(lines: &[&str]) -> Vec<TranscriptBlock> {
-    let mut blocks = Vec::new();
-    let mut index = 0usize;
-
-    while index < lines.len() {
-        let line = lines[index];
-        let has_context_line = is_context_block_start(lines, index);
-        if has_context_line || line.starts_with("$ ") {
-            let prompt_index = if has_context_line { index + 1 } else { index };
-            let mut block_end = prompt_index + 1;
-            while block_end < lines.len()
-                && !lines[block_end].starts_with("$ ")
-                && !is_context_block_start(lines, block_end)
-                && !is_legacy_context_block_start(lines, block_end)
-            {
-                block_end += 1;
-            }
-
-            blocks.push(TranscriptBlock {
-                start: index,
-                end: block_end,
-                has_error: command_block_has_error(lines, prompt_index),
-            });
-            index = block_end;
-            continue;
-        }
-
-        index += 1;
-    }
-
-    blocks
-}
-
-fn next_search_index(
-    current_index: Option<usize>,
-    result_count: usize,
-    backwards: bool,
-) -> Option<usize> {
-    if result_count == 0 {
-        return None;
-    }
-
-    Some(match (current_index, backwards) {
-        (Some(0), true) | (None, true) => result_count - 1,
-        (Some(index), true) => index.saturating_sub(1),
-        (Some(index), false) => (index + 1) % result_count,
-        (None, false) => 0,
-    })
-}
 
 fn apply_match_highlights(
     job: &mut egui::text::LayoutJob,
@@ -952,7 +407,7 @@ fn terminal_size_for_content_rect(rect: egui::Rect) -> TerminalSize {
     TerminalSize { cols, rows }
 }
 
-impl eframe::App for ViewDesktopApp {
+impl eframe::App for CmdDesktopApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(120));
         self.frame_count += 1;
@@ -1243,7 +698,7 @@ impl eframe::App for ViewDesktopApp {
     }
 }
 
-impl ViewDesktopApp {
+impl CmdDesktopApp {
     fn maybe_capture_screenshot(&mut self, ctx: &egui::Context) {
         let Some(path) = self.screenshot_target.clone() else {
             return;
@@ -2884,7 +2339,7 @@ mod tests {
     #[test]
     fn directory_picker_options_should_include_parent_and_filter_children() {
         let root = std::env::temp_dir().join(format!(
-            "view-picker-{}-{}",
+            "_cmd-picker-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2906,7 +2361,7 @@ mod tests {
     #[test]
     fn command_suggestion_should_complete_cd_from_directories() {
         let root = std::env::temp_dir().join(format!(
-            "view-suggest-{}-{}",
+            "_cmd-suggest-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2933,7 +2388,7 @@ mod tests {
     #[test]
     fn command_suggestion_should_prefer_local_directory_over_global_jump_match() {
         let root = std::env::temp_dir().join(format!(
-            "view-local-dir-{}-{}",
+            "_cmd-local-dir-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2964,7 +2419,7 @@ mod tests {
     #[test]
     fn command_suggestion_should_prefer_recent_cd_history_for_global_directory_jump() {
         let root = std::env::temp_dir().join(format!(
-            "view-global-jump-{}-{}",
+            "_cmd-global-jump-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

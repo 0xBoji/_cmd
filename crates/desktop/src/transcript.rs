@@ -1,4 +1,4 @@
-//! Terminal transcript rendering for VIEW Desktop.
+//! Terminal transcript rendering for _CMD Desktop.
 //!
 //! Handles the scrollable output area: command blocks, error highlighting,
 //! context lines (cwd + git), and block separators. Kept separate from

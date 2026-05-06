@@ -1,14 +1,14 @@
 # FAQ
 
-## Is `view` a terminal emulator?
+## Is `_cmd` a terminal emulator?
 
-Not primarily. `view` is a passive dashboard for observing local AI coding
+Not primarily. `_cmd` is a passive dashboard for observing local AI coding
 agents. The desktop surface has terminal-session UI work, but the product
 contract is still observability first.
 
-## Does `view` modify agent state?
+## Does `_cmd` modify agent state?
 
-No. The core contract is passive observation. `view` consumes structured event
+No. The core contract is passive observation. `_cmd` consumes structured event
 streams and renders state.
 
 ## How do I run it locally?
@@ -34,4 +34,4 @@ Not yet. Current configuration is environment-variable based. See
 
 ## Are Kaku features like Lua config, shell hooks, lazygit, yazi, and frecency directory jumping implemented?
 
-No. They are useful reference ideas, not current `view` features.
+No. They are useful reference ideas, not current `_cmd` features.

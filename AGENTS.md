@@ -3,11 +3,11 @@
 This file governs the entire `visual_interception_event_window/` repository.
 
 ## Mission
-Build `view` (Visual Interception Event Window), a **passive terminal agent dashboard** — a real-time, high-performance observability surface for monitoring local AI coding agents. `view` consumes JSON event streams and renders them into a multi-panel TUI and desktop UI without intercepting or interfering with the observed processes.
+Build `_cmd` (Command Center for AI Agents), a **passive terminal agent dashboard** — a real-time, high-performance observability surface for monitoring local AI coding agents. `_cmd` consumes JSON event streams and renders them into a multi-panel TUI and desktop UI without intercepting or interfering with the observed processes.
 
 ## Product Contract
-- **Binary name**: `view`
-- **Primary command**: `view` (starts the dashboard)
+- **Binary name**: `_cmd`
+- **Primary command**: `_cmd` (starts the dashboard)
 - **Role**: Passive Observer. It consumes JSON event streams and renders them into a multi-panel layout.
 - **Core Restrictions**:
     - **Non-blocking**: The TUI must never block the event processing or input handling.
@@ -33,8 +33,20 @@ crates/
 ├── core/     — domain state, engine, listener, event schemas (no UI deps)
 ├── cli/      — TUI frontend via ratatui + crossterm
 ├── desktop/  — desktop frontend via egui/eframe
+│   └── src/
+│       ├── components/  — reusable UI elements (buttons, badges, dividers)
+│       ├── panels/      — major UI regions (terminal, settings, editor)
+│       ├── utils/       — pure logic, layout math, search algorithms
+│       ├── theme.rs     — colors, paddings, and font constants
+│       └── desktop_app.rs — the root Orchestrator (state holder)
 └── web/      — web API + WebSocket server via axum
 ```
+
+**Scaling Guidelines (e.g. adding an Editor or new major panels):**
+1. **Never bloat `desktop_app.rs`**: It should only hold `AppState`, orchestrate `action_tx`, and delegate rendering.
+2. **Feature Isolation (`panels/`)**: New large features (like an Editor) must live in their own `panels/editor.rs`.
+3. **Component Reusability (`components/`)**: Any UI element used in more than one place (buttons, tabs, modals) goes into `components/`.
+4. **Logic Separation (`utils/`)**: Keep `egui` rendering code separate from math, layout, and search algorithms (`utils/`).
 
 **State access pattern:**
 ```rust

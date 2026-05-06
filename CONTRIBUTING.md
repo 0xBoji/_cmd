@@ -1,6 +1,6 @@
-# Contributing to VIEW
+# Contributing to _CMD
 
-Thanks for contributing to VIEW.
+Thanks for contributing to _CMD.
 
 ## Workspace layout
 
@@ -42,7 +42,7 @@ cargo test --workspace
 
 ## Architectural intent
 
-VIEW is intentionally split into:
+_CMD is intentionally split into:
 
 - `core` for runtime logic
 - `cli` for terminal operation

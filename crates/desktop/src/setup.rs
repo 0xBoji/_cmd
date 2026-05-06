@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
-const MANAGED_BLOCK_START: &str = "# >>> view managed shell >>>";
-const MANAGED_BLOCK_END: &str = "# <<< view managed shell <<<";
+const MANAGED_BLOCK_START: &str = "# >>> _cmd managed shell >>>";
+const MANAGED_BLOCK_END: &str = "# <<< _cmd managed shell <<<";
 
 pub enum SetupCommand {
     LaunchUi,
@@ -96,11 +96,11 @@ pub fn preview_shell_init() -> Result<String> {
 
 fn managed_zsh_path() -> Option<PathBuf> {
     if let Some(root) = std::env::var_os("VIEW_CONFIG_HOME") {
-        return Some(PathBuf::from(root).join("zsh/view.zsh"));
+        return Some(PathBuf::from(root).join("zsh/_cmd.zsh"));
     }
 
     let home = std::env::var_os("HOME")?;
-    Some(PathBuf::from(home).join(".config/view/zsh/view.zsh"))
+    Some(PathBuf::from(home).join(".config/_cmd/zsh/_cmd.zsh"))
 }
 
 fn user_zshrc_path() -> Option<PathBuf> {
@@ -162,32 +162,32 @@ mod tests {
     fn patch_zshrc_should_insert_managed_block_once() {
         let original = "export EDITOR=vim\n";
         let managed =
-            super::apply_managed_zshrc_block(original, "/Users/me/.config/view/zsh/view.zsh");
+            super::apply_managed_zshrc_block(original, "/Users/me/.config/_cmd/zsh/_cmd.zsh");
 
         assert!(managed.contains("export EDITOR=vim"));
-        assert!(managed.contains("source '/Users/me/.config/view/zsh/view.zsh'"));
-        assert_eq!(managed.matches(">>> view managed shell >>>").count(), 1);
+        assert!(managed.contains("source '/Users/me/.config/_cmd/zsh/_cmd.zsh'"));
+        assert_eq!(managed.matches(">>> _cmd managed shell >>>").count(), 1);
 
         let reapplied =
-            super::apply_managed_zshrc_block(&managed, "/Users/me/.config/view/zsh/view.zsh");
+            super::apply_managed_zshrc_block(&managed, "/Users/me/.config/_cmd/zsh/_cmd.zsh");
         assert_eq!(managed, reapplied);
     }
 
     #[test]
     fn reset_zshrc_should_remove_managed_block_and_keep_user_content() {
-        let with_block = "export EDITOR=vim\n# >>> view managed shell >>>\nsource '/Users/me/.config/view/zsh/view.zsh'\n# <<< view managed shell <<<\nalias gs='git status'\n";
+        let with_block = "export EDITOR=vim\n# >>> _cmd managed shell >>>\nsource '/Users/me/.config/_cmd/zsh/_cmd.zsh'\n# <<< _cmd managed shell <<<\nalias gs='git status'\n";
 
         let reset = super::remove_managed_zshrc_block(with_block);
 
         assert!(reset.contains("export EDITOR=vim"));
         assert!(reset.contains("alias gs='git status'"));
-        assert!(!reset.contains("view managed shell"));
-        assert!(!reset.contains("source '/Users/me/.config/view/zsh/view.zsh'"));
+        assert!(!reset.contains("_cmd managed shell"));
+        assert!(!reset.contains("source '/Users/me/.config/_cmd/zsh/_cmd.zsh'"));
     }
 
     #[test]
     fn zshrc_has_managed_block_should_detect_complete_marker_pair() {
-        let with_block = "# >>> view managed shell >>>\nsource '~/.config/view/zsh/view.zsh'\n# <<< view managed shell <<<\n";
+        let with_block = "# >>> _cmd managed shell >>>\nsource '~/.config/_cmd/zsh/_cmd.zsh'\n# <<< _cmd managed shell <<<\n";
         let without_block = "export EDITOR=vim\n";
 
         assert!(super::zshrc_has_managed_block(with_block));

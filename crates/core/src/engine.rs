@@ -25,7 +25,7 @@ pub enum Action {
     PersistHistory { command: String, cwd: String },
 }
 
-/// The centralized background engine that drives VIEW.
+/// The centralized background engine that drives _CMD.
 /// It manages the event loop, background listeners, and terminal PTYs.
 pub struct CoreEngine {
     pub state: Arc<RwLock<AppState>>,

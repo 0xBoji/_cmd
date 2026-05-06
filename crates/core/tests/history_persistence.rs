@@ -3,7 +3,7 @@ use core::app::TerminalManager;
 #[test]
 fn load_history_should_keep_recent_unique_commands_in_recency_order() {
     let root = std::env::temp_dir().join(format!(
-        "view-history-load-{}-{}",
+        "_cmd-history-load-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -40,7 +40,7 @@ fn load_history_should_keep_recent_unique_commands_in_recency_order() {
 #[test]
 fn append_history_entry_should_create_file_and_keep_last_unique_commands() {
     let root = std::env::temp_dir().join(format!(
-        "view-history-append-{}-{}",
+        "_cmd-history-append-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

@@ -1,6 +1,6 @@
 # CLI Reference
 
-`view` is not published as a standalone binary yet. Use Cargo package commands
+`_cmd` is not published as a standalone binary yet. Use Cargo package commands
 from the workspace root.
 
 ## TUI Dashboard

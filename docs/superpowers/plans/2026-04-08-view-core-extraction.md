@@ -1,8 +1,8 @@
-# VIEW Core Extraction Implementation Plan
+# _CMD Core Extraction Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Convert the current single-crate VIEW project into a Cargo workspace and extract the runtime/state logic into `core` while keeping the app runnable.
+**Goal:** Convert the current single-crate _CMD project into a Cargo workspace and extract the runtime/state logic into `core` while keeping the app runnable.
 
 **Architecture:** Introduce a workspace root plus two crates: `core` for shared domain/state/listener logic and `cli` for the current ratatui entrypoint. Start with a minimal extraction that preserves behavior by moving `app.rs` and `listener.rs` into `core`, then rewire the CLI crate to import them.
 
@@ -46,8 +46,8 @@ resolver = "2"
 edition = "2021"
 version = "0.1.0"
 license = "MIT"
-repository = "https://github.com/<org-or-user>/view"
-description = "VIEW mission-control workspace"
+repository = "https://github.com/<org-or-user>/_cmd"
+description = "_CMD mission-control workspace"
 ```
 
 - [ ] **Step 3: Create the `core` manifest**
@@ -60,7 +60,7 @@ name = "core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Core runtime and shared state for VIEW"
+description = "Core runtime and shared state for _CMD"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -80,7 +80,7 @@ name = "cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "CLI mission-control surface for VIEW"
+description = "CLI mission-control surface for _CMD"
 
 [dependencies]
 core = { path = "../core" }
@@ -125,7 +125,7 @@ Expected: both packages resolve, though later tasks may still be needed for full
 
 ```bash
 git add Cargo.toml crates/core/Cargo.toml crates/cli/Cargo.toml crates/core/src/lib.rs crates/cli/src/main.rs
-git commit -m "refactor: introduce view workspace skeleton"
+git commit -m "refactor: introduce _cmd workspace skeleton"
 ```
 
 ### Task 2: Move Runtime and State into `core`

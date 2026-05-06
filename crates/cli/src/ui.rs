@@ -70,7 +70,7 @@ fn render_grid_tabs(f: &mut Frame, app: &AppState, area: Rect, workspace_area: R
     let total_pages = app.grid_page_count(page_size);
 
     let mut spans = vec![Span::styled(
-        " VIEW ",
+        " _CMD ",
         Style::default()
             .bg(BORDER_PRIMARY)
             .fg(FG_PRIMARY)
@@ -157,7 +157,7 @@ fn render_header(f: &mut Frame, app: &AppState, area: Rect) {
 
     let content = Line::from(vec![
         Span::styled(
-            " VIEW ",
+            " _CMD ",
             Style::default()
                 .bg(BORDER_PRIMARY)
                 .fg(FG_PRIMARY)
@@ -656,7 +656,7 @@ fn render_agent_grid(f: &mut Frame, app: &AppState, area: Rect) {
         f.render_widget(
             Paragraph::new(Text::from(vec![
                 Line::from(vec![Span::styled(
-                    "No agents match the current grid view.",
+                    "No agents match the current grid _cmd.",
                     Style::default().fg(FG_PRIMARY).add_modifier(Modifier::BOLD),
                 )]),
                 Line::from("Use f to cycle filters, / to search, or Esc to clear."),
@@ -1028,7 +1028,7 @@ mod tests {
             id: "agent-1".to_string(),
             instance_name: "agent-1".to_string(),
             role: "observer".to_string(),
-            project: "view".to_string(),
+            project: "_cmd".to_string(),
             branch: "main".to_string(),
             status: "Idle".to_string(),
             capabilities: Vec::new(),

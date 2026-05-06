@@ -1,4 +1,4 @@
-//! `web` — LAN remote access server for VIEW.
+//! `web` — LAN remote access server for _CMD.
 //!
 //! Exposes a lightweight Axum HTTP + WebSocket server so any device on
 //! the local network can observe agent mesh state in real-time.
@@ -39,7 +39,7 @@ use tower_http::cors::{Any, CorsLayer};
 /// Shared state type threaded through Axum handlers.
 pub type SharedState = Arc<RwLock<AppState>>;
 
-/// Start the VIEW web server, binding to `0.0.0.0:{port}`.
+/// Start the _CMD web server, binding to `0.0.0.0:{port}`.
 ///
 /// Spawning this via `tokio::spawn` is recommended so it runs alongside
 /// the desktop UI loop without blocking.
@@ -62,7 +62,7 @@ pub async fn start(state: SharedState, port: u16) -> Result<()> {
         .layer(cors);
 
     let addr = format!("0.0.0.0:{port}");
-    tracing::info!("VIEW web server listening on http://{addr}");
+    tracing::info!("_CMD web server listening on http://{addr}");
     tracing::info!("WebSocket endpoint: ws://{addr}/ws");
 
     let listener = TcpListener::bind(&addr).await?;

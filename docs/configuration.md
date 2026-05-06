@@ -1,6 +1,6 @@
 # Configuration
 
-`view` currently uses environment variables rather than a user config file.
+`_cmd` currently uses environment variables rather than a user config file.
 
 ## Environment Variables
 
@@ -16,4 +16,4 @@
 
 A file-backed configuration layer may be added later if the desktop or web
 surfaces need persistent user preferences. Until then, avoid documenting Kaku or
-WezTerm-style Lua config as `view` behavior.
+WezTerm-style Lua config as `_cmd` behavior.

@@ -1,4 +1,4 @@
-//! Shell command helpers for VIEW Desktop.
+//! Shell command helpers for _CMD Desktop.
 //!
 //! Handles command submission, git context lines, history lookup, and
 //! directory picker logic. No egui rendering in this module — pure logic.

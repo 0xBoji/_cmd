@@ -1,4 +1,4 @@
-//! Keyboard shortcut handling for VIEW Desktop.
+//! Keyboard shortcut handling for _CMD Desktop.
 //!
 //! All application-wide key bindings live here. Surface-specific key handling
 //! (e.g., history navigation inside the shell input) remains in their respective

@@ -177,10 +177,10 @@ pub async fn start_local_shell(
     event_tx: mpsc::UnboundedSender<TerminalEvent>,
     mut command_rx: mpsc::UnboundedReceiver<TerminalCommand>,
 ) -> Result<()> {
-    let shell_home = PathBuf::from("/tmp/view-shell");
+    let shell_home = PathBuf::from("/tmp/_cmd-shell");
     let _ = tokio::fs::create_dir_all(&shell_home).await;
-    let managed_config_dir = shell_home.join(".config/view/zsh");
-    let managed_config_path = managed_config_dir.join("view.zsh");
+    let managed_config_dir = shell_home.join(".config/_cmd/zsh");
+    let managed_config_path = managed_config_dir.join("_cmd.zsh");
     let _ = tokio::fs::create_dir_all(&managed_config_dir).await;
 
     let _ = tokio::fs::write(&managed_config_path, managed_zsh_shell_integration()).await;
@@ -451,8 +451,8 @@ mod tests {
 
     #[test]
     fn shell_zshrc_loader_should_source_managed_config() {
-        let zshrc = shell_zshrc_content("/tmp/view-shell/.config/view/zsh/view.zsh");
-        assert!(zshrc.contains("source '/tmp/view-shell/.config/view/zsh/view.zsh'"));
+        let zshrc = shell_zshrc_content("/tmp/_cmd-shell/.config/_cmd/zsh/_cmd.zsh");
+        assert!(zshrc.contains("source '/tmp/_cmd-shell/.config/_cmd/zsh/_cmd.zsh'"));
     }
 
     #[test]

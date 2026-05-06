@@ -1,11 +1,11 @@
-# VIEW Desktop Architecture Design
+# _CMD Desktop Architecture Design
 
 Date: 2026-04-08
 Status: Draft for review
 
 ## Goal
 
-Evolve `view` from a high-signal observability TUI into an open-source desktop-grade terminal workspace for AI agents and RAI mesh operations.
+Evolve `_cmd` from a high-signal observability TUI into an open-source desktop-grade terminal workspace for AI agents and RAI mesh operations.
 
 The system should support:
 
@@ -16,7 +16,7 @@ The system should support:
 
 ## Product Direction
 
-`view` should not stop at being "a nice dashboard". It should become a session orchestration cockpit with three delivery surfaces built on one shared core:
+`_cmd` should not stop at being "a nice dashboard". It should become a session orchestration cockpit with three delivery surfaces built on one shared core:
 
 1. `core`
 2. `cli`
@@ -29,7 +29,7 @@ This preserves current momentum while creating a clean path to a true desktop pr
 The repository should evolve into a Cargo workspace with these crates:
 
 ```text
-view/
+_cmd/
   Cargo.toml                # workspace root
   crates/
     core/
@@ -175,7 +175,7 @@ Pure-Rust desktop can remain a future branch if performance or platform control 
 
 ## Open Source Strategy
 
-`view` should be designed as an open-source product from the start.
+`_cmd` should be designed as an open-source product from the start.
 
 ### What to Open Source
 
@@ -320,4 +320,4 @@ Desktop implementation recommendation:
 
 - Tauri v2 + frontend UI, backed by `core`
 
-This is the recommended architecture for VIEW moving forward.
+This is the recommended architecture for _CMD moving forward.
