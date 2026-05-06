@@ -1036,8 +1036,9 @@ fn render_terminal_preview(
             .layout(Layout::left_to_right(Align::Center)),
         |ui| {
         let available_w = ui.available_width();
-        // ~8px per char, reserve 28px for the folder icon; clamp to at least 6 chars
-        let path_max_chars = ((available_w - 28.0) / 8.0).floor().max(6.0) as usize;
+        // Subtract 14px left-pad + ~22px for 📁 icon + 6px right buffer.
+        // ~8px per monospace char; clamp to at least 4 chars so it's never empty.
+        let path_max_chars = ((available_w - 42.0) / 8.0).floor().max(4.0) as usize;
         let show_branch = available_w > 180.0;
 
         ui.add_space(14.0);
@@ -1623,7 +1624,7 @@ fn render_focus_terminal(
                 .layout(Layout::left_to_right(Align::Center)),
             |ui| {
             let available_w = ui.available_width();
-            let path_max_chars = ((available_w - 28.0) / 8.0).floor().max(6.0) as usize;
+            let path_max_chars = ((available_w - 42.0) / 8.0).floor().max(4.0) as usize;
             let show_branch = available_w > 180.0;
 
             ui.add_space(14.0);
