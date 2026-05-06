@@ -380,6 +380,19 @@ fn command_line_job(line: &str, has_error: bool) -> egui::text::LayoutJob {
     job
 }
 
+
+fn get_terminal_wrapped_lines(line: &str, wrap_cols: usize) -> Vec<String> {
+    if line.is_empty() {
+        return vec![String::new()];
+    }
+    let chars: Vec<char> = line.chars().collect();
+    let mut chunks = Vec::new();
+    for chunk in chars.chunks(wrap_cols.max(1)) {
+        chunks.push(chunk.iter().collect());
+    }
+    chunks
+}
+
 fn output_line_job(line: &str, cwd: &str) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     append_preserving_whitespace(
@@ -849,8 +862,7 @@ fn render_terminal_preview(
         .stick_to_bottom(true)
         .show(&mut transcript_ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
-            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-
+            
             egui::Frame::default()
                 .inner_margin(egui::Margin::symmetric(0, 0))
                 .show(ui, |ui| {
@@ -897,22 +909,23 @@ fn render_terminal_preview(
                                         bottom: block_padding_y,
                                     })
                                     .show(ui, |ui| {
-                                        ui.set_min_width(block_width);
+                                        ui.set_min_width((block_width - 28.0).max(1.0));
                                         for block_line in &recent_lines[block.start..block.end] {
-                                            let mut job = if is_command_context_line(block_line) {
-                                                context_line_job(block_line)
-                                            } else if block_line.starts_with("$ ") {
-                                                command_line_job(block_line, block.has_error)
-                                            } else if block_line.starts_with("~ (") {
-                                                let mut job = egui::text::LayoutJob::default();
-                                                append_token(&mut job, block_line, FG_MUTED, false);
-                                                job
-                                            } else {
-                                                output_line_job(block_line, &session.cwd)
-                                            };
-                                            job.wrap.max_width = ui.available_width();
-                                            job.wrap.break_anywhere = true;
-                                            ui.label(job);
+                                            let wrapped_lines = get_terminal_wrapped_lines(block_line, wrap_cols);
+                                            for line_chunk in wrapped_lines {
+                                                let job = if is_command_context_line(&line_chunk) {
+                                                    context_line_job(&line_chunk)
+                                                } else if line_chunk.starts_with("$ ") {
+                                                    command_line_job(&line_chunk, block.has_error)
+                                                } else if line_chunk.starts_with("~ (") {
+                                                    let mut job = egui::text::LayoutJob::default();
+                                                    append_token(&mut job, &line_chunk, FG_MUTED, false);
+                                                    job
+                                                } else {
+                                                    output_line_job(&line_chunk, &session.cwd)
+                                                };
+                                                ui.label(job);
+                                            }
                                         }
                                     });
 
@@ -929,18 +942,22 @@ fn render_terminal_preview(
                         }
 
                         let line = recent_lines[line_index];
-                        let mut job = if line.starts_with("~ (") {
-                            let mut job = egui::text::LayoutJob::default();
-                            append_token(&mut job, line, FG_MUTED, false);
-                            job
-                        } else {
-                            output_line_job(line, &session.cwd)
-                        };
-                        egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
-                            job.wrap.max_width = ui.available_width();
-                            job.wrap.break_anywhere = true;
-                            ui.label(job);
-                        });
+                        if line.contains("docs-arch") || line.contains("feature-arch") {
+                            println!("LINE DUMP: {:?}", line);
+                        }
+                        let wrapped_lines = get_terminal_wrapped_lines(line, wrap_cols);
+                        for line_chunk in wrapped_lines {
+                            let job = if line_chunk.starts_with("~ (") {
+                                let mut job = egui::text::LayoutJob::default();
+                                append_token(&mut job, &line_chunk, FG_MUTED, false);
+                                job
+                            } else {
+                                output_line_job(&line_chunk, &session.cwd)
+                            };
+                            egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
+                                ui.label(job);
+                            });
+                        }
                         previous_block_had_error = false;
                         line_index += 1;
                     }
@@ -1146,8 +1163,7 @@ fn render_focus_terminal(
             .stick_to_bottom(true)
             .show(&mut transcript_ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-
+                
                 egui::Frame::default()
                     .inner_margin(egui::Margin::symmetric(0, 0))
                     .show(ui, |ui| {
@@ -1227,7 +1243,7 @@ fn render_focus_terminal(
                                     .inner_margin(block_margin);
 
                                 let frame_response = frame.show(ui, |ui| {
-                                    ui.set_min_width(block_width);
+                                    ui.set_min_width((block_width - 28.0).max(1.0));
                                     if extend_error_block_to_bottom {
                                         ui.set_min_height(block_height);
                                     }
@@ -1245,30 +1261,31 @@ fn render_focus_terminal(
                                             .filter(|result| result.line_index == absolute_line_index)
                                             .map(|result| result.range.clone());
 
-                                        let mut job = if is_command_context_line(block_line) {
-                                            context_line_job(block_line)
-                                        } else if block_line.starts_with("$ ") {
-                                            command_line_job(block_line, has_error)
-                                        } else if block_line.starts_with("~ (") {
-                                            let mut job = egui::text::LayoutJob::default();
-                                            append_token(&mut job, block_line, FG_MUTED, false);
-                                            job
-                                        } else {
-                                            output_line_job(block_line, &session.cwd)
-                                        };
-                                        apply_match_highlights(
-                                            &mut job,
-                                            &line_highlights,
-                                            active_highlight,
-                                        );
-                                        job.wrap.max_width = ui.available_width();
-                                        job.wrap.break_anywhere = true;
-                                        let response = ui.label(job);
-                                        if terminal_find_active_result
-                                            .and_then(|result_index| search_results.get(result_index))
-                                            .is_some_and(|result| result.line_index == absolute_line_index)
-                                        {
-                                            response.scroll_to_me(Some(egui::Align::Center));
+                                        let wrapped_lines = get_terminal_wrapped_lines(block_line, wrap_cols);
+                                        for line_chunk in wrapped_lines {
+                                            let mut job = if is_command_context_line(&line_chunk) {
+                                                context_line_job(&line_chunk)
+                                            } else if line_chunk.starts_with("$ ") {
+                                                command_line_job(&line_chunk, has_error)
+                                            } else if line_chunk.starts_with("~ (") {
+                                                let mut job = egui::text::LayoutJob::default();
+                                                append_token(&mut job, &line_chunk, FG_MUTED, false);
+                                                job
+                                            } else {
+                                                output_line_job(&line_chunk, &session.cwd)
+                                            };
+                                            apply_match_highlights(
+                                                &mut job,
+                                                &line_highlights,
+                                                active_highlight.clone(),
+                                            );
+                                            let response = ui.label(job);
+                                            if terminal_find_active_result
+                                                .and_then(|result_index| search_results.get(result_index))
+                                                .is_some_and(|result| result.line_index == absolute_line_index)
+                                            {
+                                                response.scroll_to_me(Some(egui::Align::Center));
+                                            }
                                         }
                                     }
                                 });
@@ -1297,13 +1314,6 @@ fn render_focus_terminal(
                                 continue;
                             }
 
-                            let mut job = if line.starts_with("~ (") {
-                                let mut job = egui::text::LayoutJob::default();
-                                append_token(&mut job, line, FG_MUTED, false);
-                                job
-                            } else {
-                                output_line_job(line, &session.cwd)
-                            };
                             let line_highlights: Vec<_> = search_results
                                 .iter()
                                 .filter(|result| result.line_index == index)
@@ -1313,18 +1323,27 @@ fn render_focus_terminal(
                                 .and_then(|result_index| search_results.get(result_index))
                                 .filter(|result| result.line_index == index)
                                 .map(|result| result.range.clone());
-                            apply_match_highlights(&mut job, &line_highlights, active_highlight);
-                            egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
-                                job.wrap.max_width = ui.available_width();
-                                job.wrap.break_anywhere = true;
-                                let response = ui.label(job);
-                                if terminal_find_active_result
-                                    .and_then(|result_index| search_results.get(result_index))
-                                    .is_some_and(|result| result.line_index == index)
-                                {
-                                    response.scroll_to_me(Some(egui::Align::Center));
-                                }
-                            });
+
+                            let wrapped_lines = get_terminal_wrapped_lines(line, wrap_cols);
+                            for line_chunk in wrapped_lines {
+                                let mut job = if line_chunk.starts_with("~ (") {
+                                    let mut job = egui::text::LayoutJob::default();
+                                    append_token(&mut job, &line_chunk, FG_MUTED, false);
+                                    job
+                                } else {
+                                    output_line_job(&line_chunk, &session.cwd)
+                                };
+                                apply_match_highlights(&mut job, &line_highlights, active_highlight.clone());
+                                egui::Frame::NONE.inner_margin(egui::Margin::symmetric(14, 0)).show(ui, |ui| {
+                                    let response = ui.label(job);
+                                    if terminal_find_active_result
+                                        .and_then(|result_index| search_results.get(result_index))
+                                        .is_some_and(|result| result.line_index == index)
+                                    {
+                                        response.scroll_to_me(Some(egui::Align::Center));
+                                    }
+                                });
+                            }
                             previous_block_had_error = false;
                             previous_block_selected = false;
                             index += 1;
