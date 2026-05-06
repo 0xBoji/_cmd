@@ -1035,21 +1035,28 @@ fn render_terminal_preview(
             .max_rect(footer_layout.chips_rect)
             .layout(Layout::left_to_right(Align::Center)),
         |ui| {
+        let available_w = ui.available_width();
+        // ~8px per char, reserve 28px for the folder icon; clamp to at least 6 chars
+        let path_max_chars = ((available_w - 28.0) / 8.0).floor().max(6.0) as usize;
+        let show_branch = available_w > 180.0;
+
         ui.add_space(14.0);
-        let short_cwd = truncate_path(&session.cwd, TERMINAL_FOOTER_PATH_MAX_CHARS);
+        let short_cwd = truncate_path(&session.cwd, path_max_chars);
         let directory_button = terminal_directory_button(format!("📁 {}", short_cwd));
         ui.add(directory_button);
 
-        if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
-            ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-            let branch_button = terminal_branch_button(format!("   {}", branch));
-            let response = ui.add(branch_button);
-            draw_branch_icon(
-                ui.painter(),
-                response.rect.min.x + 8.0,
-                response.rect.center().y,
-                BRANCH_GREEN,
-            );
+        if show_branch {
+            if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
+                ui.add_space(TERMINAL_FOOTER_ROW_GAP);
+                let branch_button = terminal_branch_button(format!("   {}", branch));
+                let response = ui.add(branch_button);
+                draw_branch_icon(
+                    ui.painter(),
+                    response.rect.min.x + 8.0,
+                    response.rect.center().y,
+                    BRANCH_GREEN,
+                );
+            }
         }
         },
     );
@@ -1615,8 +1622,12 @@ fn render_focus_terminal(
                 .max_rect(footer_layout.chips_rect)
                 .layout(Layout::left_to_right(Align::Center)),
             |ui| {
+            let available_w = ui.available_width();
+            let path_max_chars = ((available_w - 28.0) / 8.0).floor().max(6.0) as usize;
+            let show_branch = available_w > 180.0;
+
             ui.add_space(14.0);
-            let short_cwd = truncate_path(&session.cwd, TERMINAL_FOOTER_PATH_MAX_CHARS);
+            let short_cwd = truncate_path(&session.cwd, path_max_chars);
             let directory_button = terminal_directory_button(format!("📁 {}", short_cwd));
             let directory_response = ui.add(directory_button);
             directory_button_rect = Some(directory_response.rect);
@@ -1627,22 +1638,24 @@ fn render_focus_terminal(
                 directory_picker_query.clear();
             }
 
-            if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
-                ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-                let branch_button = terminal_branch_button(format!("   {}", branch));
-                let response = ui.add(branch_button);
-                branch_button_rect = Some(response.rect);
-                branch_button_hovered = response.hovered();
-                draw_branch_icon(
-                    ui.painter(),
-                    response.rect.min.x + 8.0,
-                    response.rect.center().y,
-                    BRANCH_GREEN,
-                );
-                if response.clicked() {
-                    *branch_picker_open = true;
-                    *directory_picker_open = false;
-                    branch_picker_query.clear();
+            if show_branch {
+                if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
+                    ui.add_space(TERMINAL_FOOTER_ROW_GAP);
+                    let branch_button = terminal_branch_button(format!("   {}", branch));
+                    let response = ui.add(branch_button);
+                    branch_button_rect = Some(response.rect);
+                    branch_button_hovered = response.hovered();
+                    draw_branch_icon(
+                        ui.painter(),
+                        response.rect.min.x + 8.0,
+                        response.rect.center().y,
+                        BRANCH_GREEN,
+                    );
+                    if response.clicked() {
+                        *branch_picker_open = true;
+                        *directory_picker_open = false;
+                        branch_picker_query.clear();
+                    }
                 }
             }
             },
