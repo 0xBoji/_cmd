@@ -50,21 +50,44 @@ pub fn terminal_branch_button(label: String) -> egui::Button<'static> {
     .min_size(egui::vec2(0.0, 20.0))
 }
 
-pub fn draw_branch_icon(painter: &egui::Painter, left: f32, center_y: f32, color: Color32) {
-    // Compact version: ~70% of original size
-    let stroke = Stroke::new(1.1, color);
-    let top    = egui::pos2(left + 2.5, center_y - 3.5);
-    let mid    = egui::pos2(left + 2.5, center_y + 0.5);
-    let right  = egui::pos2(left + 6.5, center_y - 1.0);
-    let bottom = egui::pos2(left + 2.5, center_y + 3.5);
+/// Folder icon — mirrors Warp's `folder.svg`: rounded-rect body + tab on top-left.
+pub fn draw_folder_icon(painter: &egui::Painter, center: egui::Pos2, size: f32, color: Color32) {
+    let half = size * 0.5;
+    // Tab: filled rounded rect at top-left corner
+    let tab = egui::Rect::from_min_size(
+        egui::pos2(center.x - half, center.y - half),
+        egui::vec2(size * 0.42, size * 0.26),
+    );
+    painter.rect_filled(tab, 2.0, color);
+    // Body: outlined rounded rect
+    let body = egui::Rect::from_center_size(
+        egui::pos2(center.x, center.y + size * 0.08),
+        egui::vec2(size, size * 0.70),
+    );
+    painter.rect_stroke(body, 2.0, egui::Stroke::new(1.1, color), egui::StrokeKind::Middle);
 
-    painter.line_segment([top, mid], stroke);
-    painter.line_segment([mid, right], stroke);
-    painter.line_segment([mid, bottom], stroke);
-    painter.circle_stroke(top,   1.4, stroke);
-    painter.circle_stroke(right, 1.4, stroke);
-    painter.circle_stroke(bottom, 1.4, stroke);
 }
+
+/// Git-branch icon — mirrors Warp's `git-branch-02.svg`:
+/// vertical trunk (root→tip) + one side node branching off upper trunk.
+pub fn draw_branch_icon(painter: &egui::Painter, left: f32, center_y: f32, color: Color32) {
+    let stroke = Stroke::new(1.1, color);
+    let r = 1.4_f32;
+
+    let tip    = egui::pos2(left + 2.5, center_y - 3.5); // top node
+    let root   = egui::pos2(left + 2.5, center_y + 3.5); // bottom node
+    let side   = egui::pos2(left + 6.5, center_y - 1.0); // branch node
+
+    // Trunk
+    painter.line_segment([tip, root], stroke);
+    // Arm to side node (from upper trunk)
+    painter.line_segment([egui::pos2(left + 2.5, center_y + 0.5), side], stroke);
+
+    painter.circle_stroke(tip,  r, stroke);
+    painter.circle_stroke(root, r, stroke);
+    painter.circle_stroke(side, r, stroke);
+}
+
 
 pub fn settings_sidebar_row(
     ui: &mut egui::Ui,

@@ -1043,8 +1043,16 @@ fn render_terminal_preview(
 
         ui.add_space(14.0);
         let short_cwd = truncate_path(&session.cwd, path_max_chars);
-        let directory_button = terminal_directory_button(short_cwd);
-        ui.add(directory_button);
+        // Reserve space for the folder icon (14px) inside the chip label
+        let directory_button = terminal_directory_button(format!("     {}", short_cwd));
+        let dir_resp = ui.add(directory_button);
+        // Paint folder icon over the left side of the chip — Warp style
+        draw_folder_icon(
+            ui.painter(),
+            egui::pos2(dir_resp.rect.min.x + 11.0, dir_resp.rect.center().y),
+            10.0,
+            FG_MUTED,
+        );
 
         if show_branch {
             if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
@@ -1629,8 +1637,15 @@ fn render_focus_terminal(
 
             ui.add_space(14.0);
             let short_cwd = truncate_path(&session.cwd, path_max_chars);
-            let directory_button = terminal_directory_button(short_cwd);
+            let directory_button = terminal_directory_button(format!("     {}", short_cwd));
             let directory_response = ui.add(directory_button);
+            // Paint folder icon — Warp style
+            draw_folder_icon(
+                ui.painter(),
+                egui::pos2(directory_response.rect.min.x + 11.0, directory_response.rect.center().y),
+                10.0,
+                FG_MUTED,
+            );
             directory_button_rect = Some(directory_response.rect);
             directory_button_hovered = directory_response.hovered();
             if directory_response.clicked() {
