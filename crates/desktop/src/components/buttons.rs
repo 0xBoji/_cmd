@@ -28,41 +28,42 @@ pub fn terminal_directory_button(label: String) -> egui::Button<'static> {
     egui::Button::new(
         RichText::new(label)
             .color(FG_PRIMARY)
-            .size(13.0)
+            .size(11.0)
             .monospace(),
     )
     .stroke(Stroke::new(1.0, Color32::from_gray(60)))
-    .corner_radius(6.0)
+    .corner_radius(5.0)
     .fill(BG_PANEL_ALT)
-    .min_size(egui::vec2(0.0, 28.0))
+    .min_size(egui::vec2(0.0, 22.0))
 }
 
 pub fn terminal_branch_button(label: String) -> egui::Button<'static> {
     egui::Button::new(
         RichText::new(label)
             .color(BRANCH_GREEN)
-            .size(13.0)
+            .size(11.0)
             .monospace(),
     )
     .stroke(Stroke::new(1.0, BRANCH_GREEN_BORDER))
-    .corner_radius(6.0)
+    .corner_radius(5.0)
     .fill(BG_PANEL)
-    .min_size(egui::vec2(0.0, 26.0))
+    .min_size(egui::vec2(0.0, 20.0))
 }
 
 pub fn draw_branch_icon(painter: &egui::Painter, left: f32, center_y: f32, color: Color32) {
-    let stroke = Stroke::new(1.4, color);
-    let top = egui::pos2(left + 3.0, center_y - 5.0);
-    let mid = egui::pos2(left + 3.0, center_y + 0.5);
-    let right = egui::pos2(left + 8.5, center_y - 1.5);
-    let bottom = egui::pos2(left + 3.0, center_y + 5.0);
+    // Compact version: ~70% of original size
+    let stroke = Stroke::new(1.1, color);
+    let top    = egui::pos2(left + 2.5, center_y - 3.5);
+    let mid    = egui::pos2(left + 2.5, center_y + 0.5);
+    let right  = egui::pos2(left + 6.5, center_y - 1.0);
+    let bottom = egui::pos2(left + 2.5, center_y + 3.5);
 
     painter.line_segment([top, mid], stroke);
     painter.line_segment([mid, right], stroke);
     painter.line_segment([mid, bottom], stroke);
-    painter.circle_stroke(top, 1.9, stroke);
-    painter.circle_stroke(right, 1.9, stroke);
-    painter.circle_stroke(bottom, 1.9, stroke);
+    painter.circle_stroke(top,   1.4, stroke);
+    painter.circle_stroke(right, 1.4, stroke);
+    painter.circle_stroke(bottom, 1.4, stroke);
 }
 
 pub fn settings_sidebar_row(
