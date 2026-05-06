@@ -332,6 +332,11 @@ impl AppState {
         self.terminals.pane_layout(rect, gap)
     }
 
+    pub fn terminal_pane_layout_equal(&self, rect: PaneRect, gap: f32) -> Vec<(usize, PaneRect)> {
+        self.terminals.pane_tree.layout_equal(rect, gap)
+    }
+
+
     pub fn terminal_pane_tree(&self) -> &PaneTree {
         &self.terminals.pane_tree
     }

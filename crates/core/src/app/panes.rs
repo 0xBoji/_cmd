@@ -145,6 +145,24 @@ impl PaneTree {
         self.root.layout(rect, gap, &mut panes);
         panes
     }
+
+    /// Like `layout`, but ignores BSP ratios and gives every pane an equal share of the width.
+    pub fn layout_equal(&self, rect: PaneRect, gap: f32) -> Vec<(usize, PaneRect)> {
+        let ids = self.session_ids();
+        let n = ids.len();
+        if n == 0 {
+            return Vec::new();
+        }
+        let total_gap = gap * (n as f32 - 1.0);
+        let pane_w = ((rect.width - total_gap) / n as f32).max(0.0);
+        ids.into_iter()
+            .enumerate()
+            .map(|(i, session_id)| {
+                let x = rect.x + i as f32 * (pane_w + gap);
+                (session_id, PaneRect::new(x, rect.y, pane_w, rect.height))
+            })
+            .collect()
+    }
 }
 
 impl PaneNode {

@@ -831,7 +831,7 @@ fn render_focus(
     let host_rect = ui.available_rect_before_wrap();
     ui.painter().rect_filled(host_rect, 0.0, Color32::from_gray(58));
     // do NOT allocate_rect here — let each child pane allocate its own sub-rect
-    let pane_layout = state.terminal_pane_layout(
+    let pane_layout = state.terminal_pane_layout_equal(
         PaneRect::new(
             host_rect.min.x,
             host_rect.min.y,
@@ -840,6 +840,7 @@ fn render_focus(
         ),
         1.0,
     );
+
 
     for (session_id, pane_rect) in pane_layout {
         let rect = egui::Rect::from_min_size(
