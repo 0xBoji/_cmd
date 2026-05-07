@@ -1783,7 +1783,6 @@ fn render_focus_terminal(
                         .max_height(directory_picker_size.y - 52.0)
                         .show(ui, |ui| {
                             for option in &directory_options {
-                                let prefix = if option.is_parent { "↑" } else { "🗀" };
                                 let (rect, response) = ui.allocate_exact_size(
                                     egui::vec2(ui.available_width(), 28.0),
                                     egui::Sense::click(),
@@ -1799,13 +1798,26 @@ fn render_focus_terminal(
                                 } else {
                                     FG_PRIMARY
                                 };
-                                ui.painter().text(
-                                    egui::pos2(rect.min.x + 10.0, rect.center().y),
-                                    egui::Align2::LEFT_CENTER,
-                                    prefix,
-                                    egui::FontId::monospace(13.0),
-                                    text_color,
-                                );
+
+                                if option.is_parent {
+                                    ui.painter().text(
+                                        egui::pos2(rect.min.x + 10.0, rect.center().y),
+                                        egui::Align2::LEFT_CENTER,
+                                        "↑",
+                                        egui::FontId::monospace(13.0),
+                                        text_color,
+                                    );
+                                } else {
+                                    let icon_rect = egui::Rect::from_center_size(
+                                        egui::pos2(rect.min.x + 16.0, rect.center().y),
+                                        egui::vec2(12.0, 12.0),
+                                    );
+                                    let mut img = egui::Image::new(egui::include_image!("../assets/folder.svg"));
+                                    if response.hovered() {
+                                        img = img.tint(BG_APP);
+                                    }
+                                    img.paint_at(ui, icon_rect);
+                                }
                                 ui.painter().text(
                                     egui::pos2(rect.min.x + 34.0, rect.center().y),
                                     egui::Align2::LEFT_CENTER,
@@ -1905,16 +1917,18 @@ fn render_focus_terminal(
                                 } else {
                                     FG_PRIMARY
                                 };
-                                draw_branch_icon(
-                                    ui.painter(),
-                                    rect.min.x + 10.0,
-                                    rect.center().y,
-                                    if response.hovered() {
-                                        BG_APP
-                                    } else {
-                                        BRANCH_GREEN
-                                    },
+                                let b_icon_rect = egui::Rect::from_center_size(
+                                    egui::pos2(rect.min.x + 16.0, rect.center().y),
+                                    egui::vec2(12.0, 12.0),
                                 );
+                                let icon_color = if response.hovered() {
+                                    BG_APP
+                                } else {
+                                    BRANCH_GREEN
+                                };
+                                egui::Image::new(egui::include_image!("../assets/git-branch.svg"))
+                                    .tint(icon_color)
+                                    .paint_at(ui, b_icon_rect);
                                 ui.painter().text(
                                     egui::pos2(rect.min.x + 38.0, rect.center().y),
                                     egui::Align2::LEFT_CENTER,
