@@ -1041,14 +1041,14 @@ fn render_terminal_preview(
         |ui| {
         let available_w = ui.available_width();
         let branch_inline = available_w >= 300.0;
-        // Overhead: 14px add_space + 16px btn-pad + 33px icon-spaces + 8px right = ~71px
-        let branch_overhead = if branch_inline { 90.0 } else { 0.0 };
-        let path_max_chars = ((available_w - 71.0 - branch_overhead) / 7.0).floor().max(4.0) as usize;
+        // Overhead: 14px add_space + 16px btn-pad + 20px icon-spaces + 8px right = ~58px
+        let branch_overhead = if branch_inline { 75.0 } else { 0.0 };
+        let path_max_chars = ((available_w - 58.0 - branch_overhead) / 7.0).floor().max(4.0) as usize;
 
         ui.horizontal(|ui| {
             ui.add_space(14.0);
             let short_cwd = truncate_path(&session.cwd, path_max_chars);
-            let directory_button = terminal_directory_button(format!("     {}", short_cwd));
+            let directory_button = terminal_directory_button(format!("   {}", short_cwd));
             let dir_resp = ui.add(directory_button);
             // Warp folder.svg icon — paint_at doesn't advance layout cursor
             let icon_rect = egui::Rect::from_center_size(
@@ -1060,7 +1060,7 @@ fn render_terminal_preview(
             if branch_inline {
                 if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
                     ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-                    let branch_button = terminal_branch_button(format!("    {}", branch));
+                    let branch_button = terminal_branch_button(format!("   {}", branch));
                     let response = ui.add(branch_button);
                     // Warp git-branch.svg icon (green) — paint_at
                     let b_icon_rect = egui::Rect::from_center_size(
@@ -1077,13 +1077,14 @@ fn render_terminal_preview(
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    let branch_button = terminal_branch_button(format!("    {}", branch));
+                    let branch_button = terminal_branch_button(format!("   {}", branch));
                     let response = ui.add(branch_button);
                     // Warp git-branch.svg icon (green) — paint_at
                     let b_icon_rect = egui::Rect::from_center_size(
                         egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
                         egui::vec2(12.0, 12.0),
                     );
+
                     egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
                 });
             }
@@ -1656,13 +1657,13 @@ fn render_focus_terminal(
             |ui| {
             let available_w = ui.available_width();
             let branch_inline = available_w >= 300.0;
-            let branch_overhead = if branch_inline { 90.0 } else { 0.0 };
-            let path_max_chars = ((available_w - 71.0 - branch_overhead) / 7.0).floor().max(4.0) as usize;
+            let branch_overhead = if branch_inline { 75.0 } else { 0.0 };
+            let path_max_chars = ((available_w - 58.0 - branch_overhead) / 7.0).floor().max(4.0) as usize;
 
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
                 let short_cwd = truncate_path(&session.cwd, path_max_chars);
-                let directory_button = terminal_directory_button(format!("     {}", short_cwd));
+                let directory_button = terminal_directory_button(format!("   {}", short_cwd));
                 let directory_response = ui.add(directory_button);
                 // Warp folder.svg icon — paint_at doesn't advance layout cursor
                 let icon_rect = egui::Rect::from_center_size(
@@ -1681,7 +1682,7 @@ fn render_focus_terminal(
                 if branch_inline {
                     if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
                         ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-                        let branch_button = terminal_branch_button(format!("    {}", branch));
+                        let branch_button = terminal_branch_button(format!("   {}", branch));
                         let response = ui.add(branch_button);
                         branch_button_rect = Some(response.rect);
                         branch_button_hovered = response.hovered();
@@ -1705,7 +1706,7 @@ fn render_focus_terminal(
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);
-                        let branch_button = terminal_branch_button(format!("    {}", branch));
+                        let branch_button = terminal_branch_button(format!("   {}", branch));
                         let response = ui.add(branch_button);
                         branch_button_rect = Some(response.rect);
                         branch_button_hovered = response.hovered();
