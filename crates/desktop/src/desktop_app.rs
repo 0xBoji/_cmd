@@ -8,6 +8,7 @@ use eframe::egui::{
     self, Align, Color32, Event, Frame, Key, Layout, PointerButton, RichText, ScrollArea, Stroke,
     UiBuilder, ViewportCommand,
 };
+use egui_extras;
 use image::{ImageBuffer, Rgba};
 use parking_lot::RwLock;
 use std::collections::BTreeSet;
@@ -67,6 +68,8 @@ impl CmdDesktopApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         debug_log("desktop app: new()".to_string());
         configure_theme(&cc.egui_ctx);
+        // Install SVG/image loaders so egui can render .svg assets (Warp-style icons)
+        egui_extras::install_image_loaders(&cc.egui_ctx);
 
         let state = Arc::new(RwLock::new(AppState::new()));
         let action_tx = spawn_core_runtime(state.clone());
@@ -1043,28 +1046,26 @@ fn render_terminal_preview(
 
         ui.add_space(14.0);
         let short_cwd = truncate_path(&session.cwd, path_max_chars);
-        // Reserve space for the folder icon (14px) inside the chip label
         let directory_button = terminal_directory_button(format!("     {}", short_cwd));
         let dir_resp = ui.add(directory_button);
-        // Paint folder icon over the left side of the chip — Warp style
-        draw_folder_icon(
-            ui.painter(),
+        // Warp folder.svg icon painted over the chip's left side
+        let icon_rect = egui::Rect::from_center_size(
             egui::pos2(dir_resp.rect.min.x + 11.0, dir_resp.rect.center().y),
-            10.0,
-            FG_MUTED,
+            egui::vec2(12.0, 12.0),
         );
+        ui.put(icon_rect, egui::Image::new(egui::include_image!("../assets/folder.svg")));
 
         if show_branch {
             if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
                 ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-                let branch_button = terminal_branch_button(format!("   {}", branch));
+                let branch_button = terminal_branch_button(format!("    {}", branch));
                 let response = ui.add(branch_button);
-                draw_branch_icon(
-                    ui.painter(),
-                    response.rect.min.x + 8.0,
-                    response.rect.center().y,
-                    BRANCH_GREEN,
+                // Warp git-branch-02.svg icon (green)
+                let b_icon_rect = egui::Rect::from_center_size(
+                    egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
+                    egui::vec2(12.0, 12.0),
                 );
+                ui.put(b_icon_rect, egui::Image::new(egui::include_image!("../assets/git-branch.svg")));
             }
         }
         },
@@ -1639,13 +1640,12 @@ fn render_focus_terminal(
             let short_cwd = truncate_path(&session.cwd, path_max_chars);
             let directory_button = terminal_directory_button(format!("     {}", short_cwd));
             let directory_response = ui.add(directory_button);
-            // Paint folder icon — Warp style
-            draw_folder_icon(
-                ui.painter(),
+            // Warp folder.svg icon — painted over chip left side
+            let icon_rect = egui::Rect::from_center_size(
                 egui::pos2(directory_response.rect.min.x + 11.0, directory_response.rect.center().y),
-                10.0,
-                FG_MUTED,
+                egui::vec2(12.0, 12.0),
             );
+            ui.put(icon_rect, egui::Image::new(egui::include_image!("../assets/folder.svg")));
             directory_button_rect = Some(directory_response.rect);
             directory_button_hovered = directory_response.hovered();
             if directory_response.clicked() {
@@ -1657,16 +1657,16 @@ fn render_focus_terminal(
             if show_branch {
                 if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
                     ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-                    let branch_button = terminal_branch_button(format!("   {}", branch));
+                    let branch_button = terminal_branch_button(format!("    {}", branch));
                     let response = ui.add(branch_button);
                     branch_button_rect = Some(response.rect);
                     branch_button_hovered = response.hovered();
-                    draw_branch_icon(
-                        ui.painter(),
-                        response.rect.min.x + 8.0,
-                        response.rect.center().y,
-                        BRANCH_GREEN,
+                    // Warp git-branch-02.svg icon (green)
+                    let b_icon_rect = egui::Rect::from_center_size(
+                        egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
+                        egui::vec2(12.0, 12.0),
                     );
+                    ui.put(b_icon_rect, egui::Image::new(egui::include_image!("../assets/git-branch.svg")));
                     if response.clicked() {
                         *branch_picker_open = true;
                         *directory_picker_open = false;

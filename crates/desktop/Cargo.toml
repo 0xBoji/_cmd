@@ -12,6 +12,8 @@ categories = ["development-tools", "gui"]
 core = { path = "../core" }
 web = { path = "../web" }
 eframe = { version = "0.33", features = ["__screenshot"] }
+egui_extras = { version = "0.33", features = ["svg"] }
+
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 image = { version = "0.24", default-features = false, features = ["png"] }
