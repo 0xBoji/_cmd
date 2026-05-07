@@ -31,11 +31,12 @@ pub fn terminal_directory_button(label: String) -> egui::Button<'static> {
             .size(11.0)
             .monospace(),
     )
-    .stroke(Stroke::new(1.0, Color32::from_gray(60)))
+    .stroke(Stroke::new(1.0, Color32::from_gray(80)))
     .corner_radius(5.0)
-    .fill(BG_PANEL_ALT)
+    .fill(Color32::from_rgb(26, 28, 38))
     .min_size(egui::vec2(0.0, 22.0))
 }
+
 
 pub fn terminal_branch_button(label: String) -> egui::Button<'static> {
     egui::Button::new(
