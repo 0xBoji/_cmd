@@ -39,7 +39,7 @@ pub fn terminal_pane_sections(rect: egui::Rect) -> TerminalPaneSections {
 }
 
 pub fn terminal_footer_layout(rect: egui::Rect) -> TerminalFooterLayout {
-    let chips_height = 28.0;
+    let chips_height = 52.0; // 2 rows: dir (22px) + gap (8px) + branch (22px)
     let chips_top = rect.min.y + TERMINAL_FOOTER_TOP_GAP;
     let input_top = chips_top + chips_height + TERMINAL_FOOTER_ROW_GAP;
 

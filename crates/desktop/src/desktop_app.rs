@@ -1037,35 +1037,54 @@ fn render_terminal_preview(
     footer_ui.scope_builder(
         UiBuilder::new()
             .max_rect(footer_layout.chips_rect)
-            .layout(Layout::left_to_right(Align::Center)),
+            .layout(Layout::top_down(Align::LEFT)),
         |ui| {
         let available_w = ui.available_width();
         // Overhead: 14px add_space + 16px btn-padding + 33px icon-spaces + 8px right = ~71px
         let path_max_chars = ((available_w - 71.0) / 7.0).floor().max(4.0) as usize;
-        let show_branch = available_w > 180.0;
+        let branch_inline = available_w >= 220.0;
 
-        ui.add_space(14.0);
-        let short_cwd = truncate_path(&session.cwd, path_max_chars);
-        let directory_button = terminal_directory_button(format!("     {}", short_cwd));
-        let dir_resp = ui.add(directory_button);
-        // Warp folder.svg icon — paint_at doesn't advance layout cursor
-        let icon_rect = egui::Rect::from_center_size(
-            egui::pos2(dir_resp.rect.min.x + 11.0, dir_resp.rect.center().y),
-            egui::vec2(12.0, 12.0),
-        );
-        egui::Image::new(egui::include_image!("../assets/folder.svg")).paint_at(ui, icon_rect);
+        ui.horizontal(|ui| {
+            ui.add_space(14.0);
+            let short_cwd = truncate_path(&session.cwd, path_max_chars);
+            let directory_button = terminal_directory_button(format!("     {}", short_cwd));
+            let dir_resp = ui.add(directory_button);
+            // Warp folder.svg icon — paint_at doesn't advance layout cursor
+            let icon_rect = egui::Rect::from_center_size(
+                egui::pos2(dir_resp.rect.min.x + 11.0, dir_resp.rect.center().y),
+                egui::vec2(12.0, 12.0),
+            );
+            egui::Image::new(egui::include_image!("../assets/folder.svg")).paint_at(ui, icon_rect);
 
-        if show_branch {
+            if branch_inline {
+                if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
+                    ui.add_space(TERMINAL_FOOTER_ROW_GAP);
+                    let branch_button = terminal_branch_button(format!("    {}", branch));
+                    let response = ui.add(branch_button);
+                    // Warp git-branch.svg icon (green) — paint_at
+                    let b_icon_rect = egui::Rect::from_center_size(
+                        egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
+                        egui::vec2(12.0, 12.0),
+                    );
+                    egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
+                }
+            }
+        });
+
+        if !branch_inline {
             if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
-                ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-                let branch_button = terminal_branch_button(format!("    {}", branch));
-                let response = ui.add(branch_button);
-                // Warp git-branch.svg icon (green) — paint_at
-                let b_icon_rect = egui::Rect::from_center_size(
-                    egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
-                    egui::vec2(12.0, 12.0),
-                );
-                egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    let branch_button = terminal_branch_button(format!("    {}", branch));
+                    let response = ui.add(branch_button);
+                    // Warp git-branch.svg icon (green) — paint_at
+                    let b_icon_rect = egui::Rect::from_center_size(
+                        egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
+                        egui::vec2(12.0, 12.0),
+                    );
+                    egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
+                });
             }
         }
         },
@@ -1142,27 +1161,28 @@ fn truncate_path(value: &str, max_chars: usize) -> String {
         return "/".to_string();
     }
 
-    if parts.len() == 1 {
-        let first = parts[0];
-        let chars: Vec<char> = first.chars().collect();
-        if chars.len() > max_chars {
-            let truncated: String = chars.into_iter().take(max_chars.saturating_sub(1)).collect();
-            return format!("/{}…", truncated);
-        }
-        return format!("/{}", first);
-    }
-
     let last = parts.last().unwrap();
     let chars: Vec<char> = last.chars().collect();
-    let available_chars = max_chars.saturating_sub(2);
-    
-    if chars.len() > available_chars {
-        let truncated: String = chars.into_iter().take(available_chars.saturating_sub(1)).collect();
-        format!("…/{}…", truncated)
-    } else {
-        format!("…/{last}")
+    // Reserve 2 chars for the "…/" prefix
+    let available = max_chars.saturating_sub(2);
+
+    if chars.len() <= available {
+        return if parts.len() == 1 {
+            format!("/{last}")
+        } else {
+            format!("…/{last}")
+        };
     }
+
+    // Middle truncation: vis…dow style
+    let tail = (available / 3).max(2);
+    let head = available.saturating_sub(tail + 1); // +1 for inner "…"
+    let head_s: String = chars.iter().take(head).collect();
+    let tail_s: String = chars.iter().rev().take(tail).collect::<Vec<_>>()
+        .into_iter().rev().collect();
+    format!("…/{head_s}…{tail_s}")
 }
+
 
 #[expect(
     clippy::too_many_arguments,
@@ -1630,48 +1650,74 @@ fn render_focus_terminal(
         footer_ui.scope_builder(
             UiBuilder::new()
                 .max_rect(footer_layout.chips_rect)
-                .layout(Layout::left_to_right(Align::Center)),
+                .layout(Layout::top_down(Align::LEFT)),
             |ui| {
             let available_w = ui.available_width();
             let path_max_chars = ((available_w - 71.0) / 7.0).floor().max(4.0) as usize;
-            let show_branch = available_w > 180.0;
+            let branch_inline = available_w >= 220.0;
 
-            ui.add_space(14.0);
-            let short_cwd = truncate_path(&session.cwd, path_max_chars);
-            let directory_button = terminal_directory_button(format!("     {}", short_cwd));
-            let directory_response = ui.add(directory_button);
-            // Warp folder.svg icon — paint_at doesn't advance layout cursor
-            let icon_rect = egui::Rect::from_center_size(
-                egui::pos2(directory_response.rect.min.x + 11.0, directory_response.rect.center().y),
-                egui::vec2(12.0, 12.0),
-            );
-            egui::Image::new(egui::include_image!("../assets/folder.svg")).paint_at(ui, icon_rect);
-            directory_button_rect = Some(directory_response.rect);
-            directory_button_hovered = directory_response.hovered();
-            if directory_response.clicked() {
-                *directory_picker_open = true;
-                *branch_picker_open = false;
-                directory_picker_query.clear();
-            }
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                let short_cwd = truncate_path(&session.cwd, path_max_chars);
+                let directory_button = terminal_directory_button(format!("     {}", short_cwd));
+                let directory_response = ui.add(directory_button);
+                // Warp folder.svg icon — paint_at doesn't advance layout cursor
+                let icon_rect = egui::Rect::from_center_size(
+                    egui::pos2(directory_response.rect.min.x + 11.0, directory_response.rect.center().y),
+                    egui::vec2(12.0, 12.0),
+                );
+                egui::Image::new(egui::include_image!("../assets/folder.svg")).paint_at(ui, icon_rect);
+                directory_button_rect = Some(directory_response.rect);
+                directory_button_hovered = directory_response.hovered();
+                if directory_response.clicked() {
+                    *directory_picker_open = true;
+                    *branch_picker_open = false;
+                    directory_picker_query.clear();
+                }
 
-            if show_branch {
-                if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
-                    ui.add_space(TERMINAL_FOOTER_ROW_GAP);
-                    let branch_button = terminal_branch_button(format!("    {}", branch));
-                    let response = ui.add(branch_button);
-                    branch_button_rect = Some(response.rect);
-                    branch_button_hovered = response.hovered();
-                    // Warp git-branch.svg icon (green) — paint_at
-                    let b_icon_rect = egui::Rect::from_center_size(
-                        egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
-                        egui::vec2(12.0, 12.0),
-                    );
-                    egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
-                    if response.clicked() {
-                        *branch_picker_open = true;
-                        *directory_picker_open = false;
-                        branch_picker_query.clear();
+                if branch_inline {
+                    if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
+                        ui.add_space(TERMINAL_FOOTER_ROW_GAP);
+                        let branch_button = terminal_branch_button(format!("    {}", branch));
+                        let response = ui.add(branch_button);
+                        branch_button_rect = Some(response.rect);
+                        branch_button_hovered = response.hovered();
+                        // Warp git-branch.svg icon (green) — paint_at
+                        let b_icon_rect = egui::Rect::from_center_size(
+                            egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
+                            egui::vec2(12.0, 12.0),
+                        );
+                        egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
+                        if response.clicked() {
+                            *branch_picker_open = true;
+                            *directory_picker_open = false;
+                            branch_picker_query.clear();
+                        }
                     }
+                }
+            });
+
+            if !branch_inline {
+                if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        let branch_button = terminal_branch_button(format!("    {}", branch));
+                        let response = ui.add(branch_button);
+                        branch_button_rect = Some(response.rect);
+                        branch_button_hovered = response.hovered();
+                        // Warp git-branch.svg icon (green) — paint_at
+                        let b_icon_rect = egui::Rect::from_center_size(
+                            egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
+                            egui::vec2(12.0, 12.0),
+                        );
+                        egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
+                        if response.clicked() {
+                            *branch_picker_open = true;
+                            *directory_picker_open = false;
+                            branch_picker_query.clear();
+                        }
+                    });
                 }
             }
             },
