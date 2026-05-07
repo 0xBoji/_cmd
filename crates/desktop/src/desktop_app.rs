@@ -1040,8 +1040,8 @@ fn render_terminal_preview(
             .layout(Layout::left_to_right(Align::Center)),
         |ui| {
         let available_w = ui.available_width();
-        // font-11 monospace ≈ 7px/char; subtract 14px left-pad + 16px icon + 4px buffer
-        let path_max_chars = ((available_w - 22.0) / 7.0).floor().max(4.0) as usize;
+        // Overhead: 14px add_space + 16px btn-padding + 33px icon-spaces + 8px right = ~71px
+        let path_max_chars = ((available_w - 71.0) / 7.0).floor().max(4.0) as usize;
         let show_branch = available_w > 180.0;
 
         ui.add_space(14.0);
@@ -1633,7 +1633,7 @@ fn render_focus_terminal(
                 .layout(Layout::left_to_right(Align::Center)),
             |ui| {
             let available_w = ui.available_width();
-            let path_max_chars = ((available_w - 22.0) / 7.0).floor().max(4.0) as usize;
+            let path_max_chars = ((available_w - 71.0) / 7.0).floor().max(4.0) as usize;
             let show_branch = available_w > 180.0;
 
             ui.add_space(14.0);
