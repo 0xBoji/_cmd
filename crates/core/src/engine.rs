@@ -23,6 +23,8 @@ pub enum Action {
     ResizeTerminal { session_id: usize, size: TerminalSize },
     /// Persist a shell command to the shared command history store
     PersistHistory { command: String, cwd: String },
+    /// Close a terminal session
+    CloseTerminal { session_id: usize },
 }
 
 /// The centralized background engine that drives _CMD.
@@ -175,6 +177,14 @@ impl CoreEngine {
                             }
                             Action::ResizeTerminal { session_id, size } => {
                                 deferred_resizes.schedule(session_id, size, Instant::now(), RESIZE_DEBOUNCE);
+                            }
+                            Action::CloseTerminal { session_id } => {
+                                let mut app = state_clone.write();
+                                if app.terminals.remove_session(session_id) {
+                                    if session_id < shell_txs.len() {
+                                        shell_txs.remove(session_id);
+                                    }
+                                }
                             }
                             Action::PersistHistory { command, cwd } => {
                                 let _ = history::append_history_entry_with_cwd(&command, Some(&cwd));

@@ -887,6 +887,30 @@ fn render_focus(
         } else {
             render_terminal_preview(&mut pane_ui, session_id, &session, state);
         }
+
+        // Draw close button at top right
+        let close_hit_rect = egui::Rect::from_center_size(
+            egui::pos2(rect.max.x - 20.0, rect.min.y + 20.0),
+            egui::vec2(24.0, 24.0),
+        );
+        let close_icon_rect = egui::Rect::from_center_size(
+            egui::pos2(rect.max.x - 20.0, rect.min.y + 20.0),
+            egui::vec2(12.0, 12.0),
+        );
+        let close_response = pane_ui.interact(close_hit_rect, pane_ui.id().with("close_btn"), egui::Sense::click());
+        let close_icon_color = if close_response.hovered() {
+            crate::theme::FG_PRIMARY
+        } else {
+            crate::theme::FG_MUTED.gamma_multiply(0.5)
+        };
+        
+        egui::Image::new(egui::include_image!("../assets/x-close.svg"))
+            .tint(close_icon_color)
+            .paint_at(&mut pane_ui, close_icon_rect);
+
+        if close_response.clicked() {
+            let _ = action_tx.send(Action::CloseTerminal { session_id });
+        }
     }
 }
 
