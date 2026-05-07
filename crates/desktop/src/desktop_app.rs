@@ -1048,24 +1048,24 @@ fn render_terminal_preview(
         let short_cwd = truncate_path(&session.cwd, path_max_chars);
         let directory_button = terminal_directory_button(format!("     {}", short_cwd));
         let dir_resp = ui.add(directory_button);
-        // Warp folder.svg icon painted over the chip's left side
+        // Warp folder.svg icon — paint_at doesn't advance layout cursor
         let icon_rect = egui::Rect::from_center_size(
             egui::pos2(dir_resp.rect.min.x + 11.0, dir_resp.rect.center().y),
             egui::vec2(12.0, 12.0),
         );
-        ui.put(icon_rect, egui::Image::new(egui::include_image!("../assets/folder.svg")));
+        egui::Image::new(egui::include_image!("../assets/folder.svg")).paint_at(ui, icon_rect);
 
         if show_branch {
             if let Some((branch, _)) = shell::git_prompt_details(&session.cwd) {
                 ui.add_space(TERMINAL_FOOTER_ROW_GAP);
                 let branch_button = terminal_branch_button(format!("    {}", branch));
                 let response = ui.add(branch_button);
-                // Warp git-branch-02.svg icon (green)
+                // Warp git-branch.svg icon (green) — paint_at
                 let b_icon_rect = egui::Rect::from_center_size(
                     egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
                     egui::vec2(12.0, 12.0),
                 );
-                ui.put(b_icon_rect, egui::Image::new(egui::include_image!("../assets/git-branch.svg")));
+                egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
             }
         }
         },
@@ -1640,12 +1640,12 @@ fn render_focus_terminal(
             let short_cwd = truncate_path(&session.cwd, path_max_chars);
             let directory_button = terminal_directory_button(format!("     {}", short_cwd));
             let directory_response = ui.add(directory_button);
-            // Warp folder.svg icon — painted over chip left side
+            // Warp folder.svg icon — paint_at doesn't advance layout cursor
             let icon_rect = egui::Rect::from_center_size(
                 egui::pos2(directory_response.rect.min.x + 11.0, directory_response.rect.center().y),
                 egui::vec2(12.0, 12.0),
             );
-            ui.put(icon_rect, egui::Image::new(egui::include_image!("../assets/folder.svg")));
+            egui::Image::new(egui::include_image!("../assets/folder.svg")).paint_at(ui, icon_rect);
             directory_button_rect = Some(directory_response.rect);
             directory_button_hovered = directory_response.hovered();
             if directory_response.clicked() {
@@ -1661,12 +1661,12 @@ fn render_focus_terminal(
                     let response = ui.add(branch_button);
                     branch_button_rect = Some(response.rect);
                     branch_button_hovered = response.hovered();
-                    // Warp git-branch-02.svg icon (green)
+                    // Warp git-branch.svg icon (green) — paint_at
                     let b_icon_rect = egui::Rect::from_center_size(
                         egui::pos2(response.rect.min.x + 10.0, response.rect.center().y),
                         egui::vec2(12.0, 12.0),
                     );
-                    ui.put(b_icon_rect, egui::Image::new(egui::include_image!("../assets/git-branch.svg")));
+                    egui::Image::new(egui::include_image!("../assets/git-branch.svg")).paint_at(ui, b_icon_rect);
                     if response.clicked() {
                         *branch_picker_open = true;
                         *directory_picker_open = false;
