@@ -1040,9 +1040,10 @@ fn render_terminal_preview(
             .layout(Layout::top_down(Align::LEFT)),
         |ui| {
         let available_w = ui.available_width();
-        // Overhead: 14px add_space + 16px btn-padding + 33px icon-spaces + 8px right = ~71px
-        let path_max_chars = ((available_w - 71.0) / 7.0).floor().max(4.0) as usize;
-        let branch_inline = available_w >= 220.0;
+        let branch_inline = available_w >= 300.0;
+        // Overhead: 14px add_space + 16px btn-pad + 33px icon-spaces + 8px right = ~71px
+        let branch_overhead = if branch_inline { 90.0 } else { 0.0 };
+        let path_max_chars = ((available_w - 71.0 - branch_overhead) / 7.0).floor().max(4.0) as usize;
 
         ui.horizontal(|ui| {
             ui.add_space(14.0);
@@ -1163,24 +1164,25 @@ fn truncate_path(value: &str, max_chars: usize) -> String {
 
     let last = parts.last().unwrap();
     let chars: Vec<char> = last.chars().collect();
-    // Reserve 2 chars for the "…/" prefix
-    let available = max_chars.saturating_sub(2);
+    // Reserve 3 chars for the "../" prefix
+    let available = max_chars.saturating_sub(3);
 
     if chars.len() <= available {
         return if parts.len() == 1 {
             format!("/{last}")
         } else {
-            format!("…/{last}")
+            format!("../{last}")
         };
     }
 
-    // Middle truncation: vis…dow style
+    // Middle truncation: vis..dow style
     let tail = (available / 3).max(2);
-    let head = available.saturating_sub(tail + 1); // +1 for inner "…"
+    let head = available.saturating_sub(tail + 2); // +2 for inner ".."
     let head_s: String = chars.iter().take(head).collect();
     let tail_s: String = chars.iter().rev().take(tail).collect::<Vec<_>>()
         .into_iter().rev().collect();
-    format!("…/{head_s}…{tail_s}")
+    format!("../{head_s}..{tail_s}")
+
 }
 
 
@@ -1653,8 +1655,9 @@ fn render_focus_terminal(
                 .layout(Layout::top_down(Align::LEFT)),
             |ui| {
             let available_w = ui.available_width();
-            let path_max_chars = ((available_w - 71.0) / 7.0).floor().max(4.0) as usize;
-            let branch_inline = available_w >= 220.0;
+            let branch_inline = available_w >= 300.0;
+            let branch_overhead = if branch_inline { 90.0 } else { 0.0 };
+            let path_max_chars = ((available_w - 71.0 - branch_overhead) / 7.0).floor().max(4.0) as usize;
 
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
